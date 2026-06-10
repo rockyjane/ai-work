@@ -1,0 +1,18 @@
+# Python
+**/.venv/
+**/__pycache__/
+*.pyc
+**/.env
+
+# 資料庫檔（資料用 seed.py 重新產生即可）
+*.db
+
+# Node
+**/node_modules/
+**/dist/
+
+# Claude 本機設定
+.claude/settings.local.json
+
+# 系統
+.DS_Store

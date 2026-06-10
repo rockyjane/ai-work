@@ -1,0 +1,13 @@
+# 版本經實測鎖定。重點：技術指標改為純 pandas 手算，不裝 ta 套件，
+# 因此 FinMind 與其他套件不再有相依衝突。
+fastapi
+uvicorn[standard]
+pydantic>=2.9
+SQLAlchemy>=2.0
+PyMySQL
+pandas>=2.3,<3
+numpy<2
+FinMind==1.9.11
+tqdm
+APScheduler
+python-dotenv
