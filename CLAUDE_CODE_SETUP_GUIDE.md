@@ -199,7 +199,8 @@ claude --teleport                          # 或在網頁點「Open in CLI」複
 
 ## 10. 換電腦 / 重裝 Checklist
 
-- [ ] 裝 Node.js
+**Claude Code / GitHub 工具：**
+- [ ] 裝 Node.js（NVM，`nvm install 20`，第 11.4 點）
 - [ ] 裝 Claude Code CLI，`claude` → `/login`（claude.ai 帳號）
 - [ ] 裝 `gh`，`gh auth login`
 - [ ] （要用網頁版）`/web-setup` 或在 `claude.ai/code` 連接 GitHub
@@ -207,15 +208,128 @@ claude --teleport                          # 或在網頁點「Open in CLI」複
 - [ ] `git clone` 你的專案，確認根目錄有 `CLAUDE.md`
 - [ ] 需要接力雲端 session 時，用 `worktree` + `claude --teleport`
 
+**本機開發環境（做 Python 專案時，第 11 點）：**
+- [ ] 先搞清楚 `python3` 是哪版（`python3 -V`），需要時改用 `python3.11 -m venv .venv`
+- [ ] venv 獨立於 Anaconda（提示字元無 `(base)`），`which python` 指向 `.venv`
+- [ ] `requirements.txt` 鎖好版本；裝完用 `python -c "import 套件"` 實測
+- [ ] 舊 macOS 的 Docker Desktop 能跑就別升級（第 11.5 點）
+- [ ] 推送 GitHub 用 classic `repo` token；用完去 Developer settings **revoke**（第 12 點）
+
+---
+
+## 11. 本機環境搭建踩雷（macOS Intel + 多套 Python/Node 並存）
+
+> 情境：MacBook Pro 2015 / Intel / macOS Monterey 12.7.6，機器上同時有
+> Anaconda、Homebrew Python、NVM、rbenv、Docker。**多套工具並存正是雷的來源。**
+
+### 11.1 ⚠️ Python 有好幾個版本，`python3` 不一定是你要的那個
+- 實測：這台機器上 `python3` 指向 **Homebrew 的 Python 3.13**，而 **3.11 藏在 Anaconda 裡**（指令 `python3.11` 可直接叫到，路徑類似 `~/opt/anaconda3/bin`）。
+- 為什麼要在意：很多資料科學套件（如 `numpy<2`）在**太新的 Python（3.13）沒有預編譯好的 wheel**，pip 會去硬編譯而失敗。
+- **對策**：建虛擬環境時**明確指定版本**，不要無腦用 `python3`：
+  ```bash
+  python3.11 -m venv .venv      # ← 指定 3.11，不要用 python3（那可能是 3.13）
+  source .venv/bin/activate
+  python -V                     # 確認真的是 3.11.x
+  which python                  # 確認指向 .venv 而不是 Anaconda/Homebrew
+  ```
+- **判斷指令**：`command -v python3.11`、`python3 -V` 先各跑一次，搞清楚哪個是哪個再動手。
+
+### 11.2 venv 要獨立於 Anaconda（避免 PATH 打架）
+- 提示字元前若有 `(base)`，代表 conda 環境是 active 的，容易污染 PATH。
+- 用 `python3.11 -m venv` 建出來的 venv **一旦建好就獨立運作**，跟 Anaconda 脫鉤；之後一律用 venv 內的 `python`／`pip`。
+
+### 11.3 ⚠️ Python 套件版本一定要「鎖」——相依地獄是真的
+- **不鎖版本的下場**：`pip install` 會抓到一堆**最新但互不相容**的版本。我們實際遇到：
+  - 沒鎖 → pandas 被拉到 3.0、指標套件 `ta` 卻被降到 2019 的舊版（API 全變，程式跑不動）。
+  - 某些套件相依很「霸道」，會反過來指定 pandas / pydantic / numpy 的版本，跟 FastAPI 等打架。例如資料源套件硬要舊版 `pydantic 1.x`，直接讓需要 `pydantic 2.x` 的 FastAPI 崩掉。
+- **三條心法**：
+  1. `requirements.txt` 用**鎖好的版本範圍**（自己實測能跑的組合），別讓 pip 隨意挑。
+  2. 兩個套件**版本要求互斥**時（A 要 pandas<2.3、B 要 pandas≥2.3），找**交集的「甜蜜點」版本**（例如 pandas 2.3.x 兩邊都收）。
+  3. **真的喬不攏，就拿掉那個「製造衝突」的套件**。我們最後把技術指標庫整個拔掉、改用 pandas 手算——衝突消失，還更看得懂原理。
+- **小工具**：`pip install` 後務必 `python -c "import 套件"` 實際 import 一次，光看「Successfully installed」不代表跑得動（有套件還會漏宣告相依，例如少裝 `tqdm`）。
+
+### 11.4 Node 用 NVM，選 LTS 就好
+- 舊機器（Intel / Monterey）追最新 Node 容易出狀況，**Node 20 LTS** 最穩：
+  ```bash
+  nvm install 20 && nvm use 20
+  ```
+- 不必追 Node 22+；Vite 5 只要 Node 18+ 即可。
+
+### 11.5 Docker Desktop 別亂升級
+- 舊 macOS（如 Monterey）上，**新版 Docker Desktop 可能已不支援**。
+- 若你現在的版本能正常跑（容器、phpMyAdmin 都正常），就**維持現狀別升級**，免得升完整個開不起來。
+
+### 11.6 跨資料庫小雷：SQLite 的自增主鍵
+- 同一份 ORM 程式想同時支援 SQLite（本機開發）與 MySQL（正式）時：
+  **SQLite 只有宣告成 `INTEGER` 的主鍵才會自動遞增**，用 `BigInteger` 會報 `NOT NULL constraint failed: xxx.id`。
+- 解法（一份程式兩種 DB 都通）：
+  ```python
+  from sqlalchemy import Integer, BigInteger
+  PK = BigInteger().with_variant(Integer, "sqlite")   # MySQL→BIGINT，SQLite→可自增的 INTEGER
+  ```
+
+---
+
+## 12. 本機用 Token 推送 GitHub 的雷（和第 4 點雲端 403 是「不同的 403」）
+
+> ⚠️ 重要區分：
+> - **第 4 點的 403**＝**雲端** session 經由 **GitHub App** 推送，App 沒 Installed → `Resource not accessible by integration`。
+> - **本節的 403**＝**本機** `git push` 用 **Personal Access Token（PAT）**，token 權限不足或 keychain 憑證搞混 → `Permission ... denied`。
+> 兩者解法完全不同，別套錯。
+
+### 症狀
+- 本機 `git push` → `remote: Permission to <user>/<repo>.git denied to <user>` / `403`。
+- 弔詭點：明明 `gh auth status` 顯示已登入、帳號也是 repo 擁有者。
+
+### 根因（我們實際踩到兩層）
+1. **fine-grained PAT 沒給「Contents: Read and write」**——這是最隱蔽的雷。
+   - 用 GitHub API 查 repo 會看到 `"permissions": {"push": true, "admin": true}`，**但那是「你這個帳號」對 repo 的權限，不是「token」的權限**。看到 push:true 會以為沒問題，其實 token 本身根本沒勾寫入。
+   - **怎麼確認 token 到底能不能寫**（非破壞性探針，失敗不會留檔）：
+     ```bash
+     curl -s -X PUT -H "Authorization: Bearer <TOKEN>" \
+       https://api.github.com/repos/<user>/<repo>/contents/.probe \
+       -d '{"message":"probe","content":"cHJvYmU="}'
+     # 回 "Resource not accessible by personal access token" → token 沒有 Contents 寫入權
+     # 回 含 commit sha → token 可寫
+     ```
+2. **macOS Keychain 存了舊的 github 憑證**，`git push` 會優先抓那組舊的，把你想用的新 token 蓋掉。
+
+### 解法
+- **最省事：改用 classic token**
+  - GitHub → Settings → Developer settings → **Personal access tokens → Tokens (classic)** → Generate → **勾最上面那個大項 `repo`** → 複製（`ghp_` 開頭）。`repo` 全範圍一定能 push。
+- **想用 fine-grained token**：編輯 token → **Repository permissions → `Contents` 改成 `Read and write`**（不是只選 repo 就好，那一格預設是 No access），並確認 Repository access 含目標 repo。
+- **推送時不讓 token 落地、也繞過 keychain**：
+  ```bash
+  # 用 -c credential.helper= 關掉憑證助手，token 只放在這一次的 URL，不寫進 .git/config
+  git -c credential.helper= push "https://<user>:<TOKEN>@github.com/<user>/<repo>.git" main:main
+  git remote get-url origin   # 確認 origin 仍是乾淨的無 token 網址
+  ```
+- **清掉 keychain 裡的舊憑證**（之後想讓它正常記住新 token 時）：
+  ```bash
+  git credential-osxkeychain erase
+  # 接著輸入兩行後按兩下 Enter：
+  #   host=github.com
+  #   protocol=https
+  ```
+
+### 🔐 安全善後
+- **token 一旦貼進對話／指令列就視同外洩**。任務完成後，到 Developer settings 把用過的 token **revoke（撤銷）**，下次要推再臨時建新的。
+- 永遠不要把 token commit 進 repo；`.env`、含 token 的 URL 都要在 `.gitignore`。
+
 ---
 
 ## 附錄：常見錯誤訊息對照
 
 | 訊息 | 多半代表 | 解法 |
 | :--- | :--- | :--- |
-| `403 Resource not accessible by integration` | GitHub App 沒 Installed 或無寫入權 | 第 4 點：安裝官方 Claude App 到 repo |
-| `Permission to ....git denied` (push 403) | 同上，連線唯讀 | 同上 |
+| `403 Resource not accessible by integration` | **雲端** GitHub App 沒 Installed 或無寫入權 | 第 4 點：安裝官方 Claude App 到 repo |
+| `Resource not accessible by personal access token` | **本機** PAT 沒有 `Contents` 寫入權 | 第 12 點：用 classic `repo` token，或補 fine-grained 的 Contents R/W |
+| `Permission to ....git denied`（本機 push 403） | 本機 PAT 權限不足／keychain 抓到舊憑證 | 第 12 點 |
+| `Could not read Username ... Device not configured` | 沒有可用憑證又無互動終端可輸入 | 第 12 點：用內含 token 的 URL 推送 |
 | `Host not in allowlist`（cloudflared 等） | 雲端網路白名單封鎖 | 第 5 點：改本機跑或部署 |
 | `Unknown command`（`/web-setup`） | 在一般 shell 打、或 CLI 太舊 | 在 `claude` 內打；`claude update` |
 | `--teleport unavailable` | 非 claude.ai 訂閱登入 | `/login` 改用 claude.ai 帳號 |
 | `Could not resume session ... environment has expired` | 雲端容器已被回收 | 正常現象；改開新 session |
+| `NOT NULL constraint failed: xxx.id`（SQLite） | BigInteger 主鍵在 SQLite 不自增 | 第 11.6 點：用 `with_variant(Integer, "sqlite")` |
+| pip 裝完仍 `ModuleNotFoundError` / 版本被亂降 | 套件相依衝突、或套件漏宣告相依 | 第 11.3 點：鎖版本、找甜蜜點、必要時拔掉衝突套件 |
+| 編譯 numpy/pandas 失敗 | Python 版本太新（如 3.13）沒有 wheel | 第 11.1 點：改用 `python3.11 -m venv` |
