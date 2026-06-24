@@ -312,8 +312,31 @@ claude --teleport                          # 或在網頁點「Open in CLI」複
   #   protocol=https
   ```
 
-### 🔐 安全善後
-- **token 一旦貼進對話／指令列就視同外洩**。任務完成後，到 Developer settings 把用過的 token **revoke（撤銷）**，下次要推再臨時建新的。
+### 12.1 ⚠️ `gh` 用的是「另一套」憑證，受限 token 會擋住改 PR
+- `gh`（pr create/edit/merge 等）用的是它**自己存在 keyring 的 token**，跟 `git push` 用的憑證**是兩套**。
+- 若當初是用**受限的 fine-grained token** 登入 `gh`，改 PR 會被擋：
+  `GraphQL: Resource not accessible by personal access token (updatePullRequest)`。
+- 臨時繞過：`GH_TOKEN=<有 repo 權限的 token> gh pr edit ...`（一次性、不落地）。但**正解是下面的重新授權**。
+
+### 12.2 ✅ 讓 `gh` 與 `git push` 從此順暢（推薦，免再手貼 token）
+用**瀏覽器 OAuth 重新登入 `gh`**，拿到完整權限的 token，而且全程不用手貼任何字串：
+
+```bash
+gh auth login
+#   依序選：GitHub.com → HTTPS → "Authenticate Git with your GitHub credentials?" 選 Yes
+#          → "Login with a web browser" → 複製畫面上的一次性代碼 → 到瀏覽器貼上並授權
+gh auth setup-git     # 讓 git push 也改用 gh 的憑證（之後 push 不必再帶 token）
+gh auth status        # 確認：Token 應是 'gho_' 開頭的 OAuth、scopes 含 repo
+```
+
+完成後：`gh pr create/edit/merge` 都能用；`git push` 走 gh 憑證助手；**從此不必再把任何 token 貼到對話或指令列**（最安全的狀態）。
+
+### 12.3 🔐 貼過的 token 要不要 revoke？（看暴露風險，不是反射動作）
+- 原則：**任何在對話／指令列／log 出現過的 token，視同可能被看到**。但要不要撤銷取決於風險：
+  - 可能被別人看到（共用螢幕、會被他人存取的 log、公開 CI）→ **務必 revoke 重建**。
+  - 自己的私有 repo、自己掌握的本機 session／transcript → **風險低，是否撤銷由你判斷，不是非撤不可**。
+- **更好的是「根本不要貼」**：改用 12.2 的瀏覽器 OAuth + `setup-git`，之後 push／PR 都走 keyring，永遠不必把 token 給任何人 → 也就沒有「貼了要不要撤」的兩難。
+- 改用 OAuth 後，那顆手貼過的 token 已用不到，可以順手 revoke 收乾淨。
 - 永遠不要把 token commit 進 repo；`.env`、含 token 的 URL 都要在 `.gitignore`。
 
 ---
@@ -324,6 +347,7 @@ claude --teleport                          # 或在網頁點「Open in CLI」複
 | :--- | :--- | :--- |
 | `403 Resource not accessible by integration` | **雲端** GitHub App 沒 Installed 或無寫入權 | 第 4 點：安裝官方 Claude App 到 repo |
 | `Resource not accessible by personal access token` | **本機** PAT 沒有 `Contents` 寫入權 | 第 12 點：用 classic `repo` token，或補 fine-grained 的 Contents R/W |
+| `... personal access token (updatePullRequest)` | **`gh`** 用受限 token 登入，不能改 PR | 第 12.2 點：`gh auth login` 瀏覽器 OAuth 重新授權 |
 | `Permission to ....git denied`（本機 push 403） | 本機 PAT 權限不足／keychain 抓到舊憑證 | 第 12 點 |
 | `Could not read Username ... Device not configured` | 沒有可用憑證又無互動終端可輸入 | 第 12 點：用內含 token 的 URL 推送 |
 | `Host not in allowlist`（cloudflared 等） | 雲端網路白名單封鎖 | 第 5 點：改本機跑或部署 |
