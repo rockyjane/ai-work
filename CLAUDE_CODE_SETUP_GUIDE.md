@@ -335,6 +335,7 @@ gh auth status        # 確認：Token 應是 'gho_' 開頭的 OAuth、scopes �
 > 它是互動式（device code + 開瀏覽器），在背景/非互動環境會卡住並失敗：
 > `failed to authenticate via web browser: context deadline exceeded`。
 > 對策：另開一個終端機分頁手動跑 `gh auth login` + `gh auth setup-git`。因為 gh 把 token 存進**系統 keyring**，授權完後**正在跑的 Claude Code session 直接就能用**（`git push` 會自動走 gh 憑證），不必重開。
+> （萬一已經不小心在背景跑了、Claude Code 畫面卡住，脫身步驟見 **§13**。）
 
 ### 12.3 🔐 貼過的 token 要不要 revoke？（看暴露風險，不是反射動作）
 - 原則：**任何在對話／指令列／log 出現過的 token，視同可能被看到**。但要不要撤銷取決於風險：
@@ -343,6 +344,33 @@ gh auth status        # 確認：Token 應是 'gho_' 開頭的 OAuth、scopes �
 - **更好的是「根本不要貼」**：改用 12.2 的瀏覽器 OAuth + `setup-git`，之後 push／PR 都走 keyring，永遠不必把 token 給任何人 → 也就沒有「貼了要不要撤」的兩難。
 - 改用 OAuth 後，那顆手貼過的 token 已用不到，可以順手 revoke 收乾淨。
 - 永遠不要把 token commit 進 repo；`.env`、含 token 的 URL 都要在 `.gitignore`。
+
+---
+
+## 13. Claude Code CLI 操作雷：互動式指令卡住、輸入法、如何安全脫身
+
+> 承 §12.2——萬一你（或 Claude）真的在 Claude Code 裡用 `!` 背景模式跑了**互動式指令**（`gh auth login`、`ssh-keygen`、`vim`…），畫面會卡在「等一個永遠等不到的輸入」。以下是脫身 SOP。
+
+### 13.1 ⚠️ 中文輸入法會讓你「英數鍵、連 Esc 都打不進去」
+- **症狀**：Claude Code 全螢幕介面下，輸入框**只吃得了中文，英文字母、數字、甚至 `Esc` 都送不進去**，怎麼按都沒反應。
+- **原因（白話）**：終端機在這種全螢幕 TUI 下，**中文輸入法（注音／拼音）會先攔截英數鍵**拿去組字，按鍵根本沒送到程式，所以看起來「整個卡死」。
+- **對策**：先把**輸入法切回英文（ABC / U.S.）**——按 `Caps Lock`（中文輸入法多半用它切中／英）、或 `Ctrl + Space`、或點螢幕右上角選單列的輸入法圖示。切完英數鍵就正常了，後面的步驟才按得動。
+
+### 13.2 切到英文後，安全脫身步驟
+1. 按幾下 `Esc`，關掉畫面上的覆蓋提示（若出現「How is Claude doing this session?」評分列，按 `0` Dismiss）。
+2. 打 `/bashes`（或畫面下方提示的 `↓ to manage`）→ 找到那個卡住的背景 shell → 把它 **kill**。
+3. 還是完全沒反應 → **連按兩次 `Ctrl + C`** 離開 Claude Code，或乾脆**直接關掉那個終端機分頁／視窗**。
+   - 這 **100% 安全**：互動式指令只是在空等輸入，沒有任何破壞性操作在跑，你的**檔案與 git 都在硬碟上、原封不動**，卡住的指令會跟著一起結束。
+
+### 13.3 ✅ 關掉後別怕弄丟對話——用 `--resume` 救回
+Claude Code 的對話歷史存在本機，關掉 / `Ctrl+C` 後可以叫回來，**舊 session 不會消失**：
+```bash
+claude --resume     # 列出過去的 session，挑回剛剛那個接續
+# 或
+claude -c           # 直接接續「這個資料夾」最近一次對話
+```
+
+> **通則（同 §12.2）**：需要你親自互動的指令（device code、按 Enter、選單）一律**自己在終端機分頁跑**，不要丟給 Claude 背景執行；設定好再回 Claude Code 繼續即可。
 
 ---
 
@@ -358,6 +386,8 @@ gh auth status        # 確認：Token 應是 'gho_' 開頭的 OAuth、scopes �
 | `Host not in allowlist`（cloudflared 等） | 雲端網路白名單封鎖 | 第 5 點：改本機跑或部署 |
 | `Unknown command`（`/web-setup`） | 在一般 shell 打、或 CLI 太舊 | 在 `claude` 內打；`claude update` |
 | `--teleport unavailable` | 非 claude.ai 訂閱登入 | `/login` 改用 claude.ai 帳號 |
+| Claude Code 畫面卡住、英數／`Esc` 都打不進去 | 中文輸入法攔截全螢幕 TUI 的英數鍵 | 第 13.1 點：切回英文輸入法（ABC） |
+| 互動式指令（`gh auth login` 等）在 `!` 背景模式卡死 | 互動式指令收不到輸入 | 第 13 點：切英文→`/bashes` kill→必要時關終端機→`claude --resume` |
 | `Could not resume session ... environment has expired` | 雲端容器已被回收 | 正常現象；改開新 session |
 | `NOT NULL constraint failed: xxx.id`（SQLite） | BigInteger 主鍵在 SQLite 不自增 | 第 11.6 點：用 `with_variant(Integer, "sqlite")` |
 | pip 裝完仍 `ModuleNotFoundError` / 版本被亂降 | 套件相依衝突、或套件漏宣告相依 | 第 11.3 點：鎖版本、找甜蜜點、必要時拔掉衝突套件 |
