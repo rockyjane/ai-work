@@ -374,6 +374,42 @@ claude -c           # 直接接續「這個資料夾」最近一次對話
 
 ---
 
+## 14. Auto-fix（自動修 CI／回應 PR 留言）：開關位置與 token 取捨
+
+> 一句話：**Auto-fix 是「網頁版（雲端）」專屬功能**，雲端會在背景盯著 PR 自動動作。**本機 CLI 不會背景跑這個**。
+
+### 14.1 它是什麼、誰在跑
+- **Auto-fix** 開啟後，雲端 session 會持續盯一個 PR，遇到 **① CI 檢查失敗 ② 新的 review 留言** 就自動調查並推修正。（坊間說的「address comments」就是它回應 review 留言的那部分，跟修 CI 是同一個功能。）
+- **本機 CLI 不會背景監看**；它只能用 `/autofix-pr` 去**啟動一個雲端 session** 來盯——啟動後仍是雲端在跑。
+- 所以本機 session 不會自動看到你的 PR 留言；要看得叫它去抓（見 14.4）。
+
+### 14.2 開關在哪（你要的那顆按鈕）
+在**網頁版開著某個 PR 時，畫面最上方的「CI 狀態列（CI status bar）」**裡：
+
+| 動作 | 操作 |
+| :--- | :--- |
+| **開** | 點開 CI 狀態列 → 選 **Auto-fix** |
+| **關** | 點開 CI 狀態列 → **取消 Auto-fix 勾選**，或直接跟 Claude 說「停止盯這個 PR」 |
+
+其他開啟方式：終端機 `/autofix-pr`、手機 App 說「watch this PR」、或把 PR 連結貼進 session 叫它 auto-fix。
+
+### 14.3 ⚠️ token 取捨
+- 雲端 session 跟你帳號**共用同一份用量／rate limit**；**雲端 VM 不另外收費，但 token 照算**。
+- Auto-fix 每被觸發一次（新留言／CI 失敗）就跑一輪、吃 token。
+- **建議**：沒在等 CI、沒在收 review 時就**關掉**，需要時再從 CI 狀態列打開。（本機 CLI 則只有你對話的回合才耗 token，不會背景常駐。）
+
+### 14.4 本機 CLI 的等效手動做法（隨叫隨做、可控）
+```bash
+gh pr view <PR#> --json reviews          # 看 review 留言
+gh pr view <PR#> --json statusCheckRollup # 看 CI 狀態
+gh pr diff <PR#>                          # 看 diff
+```
+再自己 `git pull` → 改 → 測 → `git push`。等於手動做 Auto-fix 的事，但**在你掌控下、不會背景偷耗 token**。
+
+📚 來源：官方 [Claude Code on the web — Auto-fix pull requests](https://code.claude.com/docs/en/claude-code-on-the-web.md#auto-fix-pull-requests)、[Limitations / Rate limits](https://code.claude.com/docs/en/claude-code-on-the-web.md#limitations)。
+
+---
+
 ## 附錄：常見錯誤訊息對照
 
 | 訊息 | 多半代表 | 解法 |
