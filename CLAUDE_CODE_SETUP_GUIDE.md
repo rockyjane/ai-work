@@ -331,6 +331,11 @@ gh auth status        # 確認：Token 應是 'gho_' 開頭的 OAuth、scopes �
 
 完成後：`gh pr create/edit/merge` 都能用；`git push` 走 gh 憑證助手；**從此不必再把任何 token 貼到對話或指令列**（最安全的狀態）。
 
+> ⚠️ **`gh auth login` 要在「真正的終端機分頁」跑，不要用 Claude Code 的 `!` 背景模式。**
+> 它是互動式（device code + 開瀏覽器），在背景/非互動環境會卡住並失敗：
+> `failed to authenticate via web browser: context deadline exceeded`。
+> 對策：另開一個終端機分頁手動跑 `gh auth login` + `gh auth setup-git`。因為 gh 把 token 存進**系統 keyring**，授權完後**正在跑的 Claude Code session 直接就能用**（`git push` 會自動走 gh 憑證），不必重開。
+
 ### 12.3 🔐 貼過的 token 要不要 revoke？（看暴露風險，不是反射動作）
 - 原則：**任何在對話／指令列／log 出現過的 token，視同可能被看到**。但要不要撤銷取決於風險：
   - 可能被別人看到（共用螢幕、會被他人存取的 log、公開 CI）→ **務必 revoke 重建**。
