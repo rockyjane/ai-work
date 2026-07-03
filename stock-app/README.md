@@ -3,6 +3,7 @@
 Vue 3 + FastAPI + SQLite/MySQL 的台股分析網站。功能：股票搜尋、K 線圖、技術指標（MA/RSI/MACD/KD）、漲跌幅排行、自選股。
 
 > 環境已針對 MacBook Pro 2015 / Intel / Monterey 12.7.6 調校。詳見上層 `stock-analysis-project-plan.md`。
+> 本專案**詳細開發紀錄**見 [`DEV_LOG.md`](DEV_LOG.md)（現象/原因/解法、實測、現況與下一步）；跨專案**簡要摘要**在 [`../DEV_LOG.md`](../DEV_LOG.md)；環境/工具搭建的雷在 [`../CLAUDE_CODE_SETUP_GUIDE.md`](../CLAUDE_CODE_SETUP_GUIDE.md)。
 
 ---
 
