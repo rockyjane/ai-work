@@ -1,53 +1,19 @@
-# DEV_LOG — 股票分析網站開發筆記
+# DEV_LOG — ai-work 跨專案開發摘要
 
-> 這份檔案是整個專案的「共同開發記錄」。
-> 不管在本機終端機、雲端 session、或日後的任何 subagent，都寫進這同一份檔案，
-> 這樣記錄就不會分散在各個對話歷史裡（對話歷史會分散、也可能被裁切，不可靠）。
-> 用途：累積踩過的雷、AI 給的好觀念、重要決策 —— 日後整理成 Medium 教學或面試時的談資。
-
----
-
-## 寫入格式（請務必遵守，方便日後整理）
-
-每一筆記錄獨立一段，開頭固定為：
-
-```
-## 日期 時間 [寫入者] 分類
-內容（一到數行皆可）
-```
-
-- **日期時間**：例如 `2026-06-17 19:40`
-- **寫入者**：是誰寫的。單人開發時可寫 `[me]` 或 `[claude]`；日後若用 subagent 則寫 `[frontend-dev]`、`[backend-dev]` 等
-- **分類**：擇一 —— `雷`（踩過的坑）、`觀念`（學到的好知識）、`決策`（為什麼這樣做）、`待辦`（之後要處理）
-
-### 範例
-
-## 2026-06-17 19:40 [frontend-dev] 雷
-Tailwind 的 JIT 模式在動態組出來的 class 名稱下不會生成樣式，要用完整字串，不能用字串拼接。
-
-## 2026-06-17 20:15 [backend-dev] 觀念
-股價 API 有 rate limit（呼叫次數上限），需要做快取層；先用簡單的記憶體快取擋一下即可。
-
-## 2026-06-17 21:00 [me] 決策
-先做台股清單頁，再做個股詳情頁；即時報價放到第二階段，避免一開始就卡在 API 限制上。
+> 這份放在 repo 根目錄，是 ai-work 底下**所有專案的開發摘要（簡要）**：一個專案一小段，只記狀態、技術組成與關鍵決策。
+>
+> - **各專案的詳細紀錄**（現象→原因→解法、實測、現況與下一步）放在**該專案資料夾自己的 `DEV_LOG.md`**。
+> - **環境／工具搭建**的雷（Claude Code、gh、Python/Node/venv/Docker）→ [`CLAUDE_CODE_SETUP_GUIDE.md`](CLAUDE_CODE_SETUP_GUIDE.md)。
+>
+> 用途：日後整理成 Medium 教學或面試談資時，先看這份總覽，再鑽進各專案細節。
 
 ---
 
-## 開發記錄（從這條線以下開始往下追加）
+## stock-app — 台股分析網站（重返金融業面試 DEMO + 學後端）
 
-<!-- 新記錄請加在這行下面 -->
+- **狀態**：MVP 後端完成並實測通過；前端程式碼齊全，待啟動。
+- **技術**：FastAPI + SQLAlchemy + 純 pandas 手算指標 + FinMind｜Vue 3 + Vite + ECharts｜DB SQLite⇄MySQL 可切。
+- **關鍵決策**：技術指標純 pandas 手算（避開 FinMind 相依衝突）、資料層抽象（一份 ORM 兩種 DB）、行情先進 DB 再供前端。
+- **詳細紀錄** → [`stock-app/DEV_LOG.md`](stock-app/DEV_LOG.md)
 
-## 2026-06-10 22:00 [claude] 決策
-技術指標（MA/RSI/MACD/KD）改用**純 pandas 手算**，不裝 `ta` 套件。原因：`ta` 0.11 要 pandas<2.3、FinMind 1.9.11 要 pandas≥2.3，兩者無解無法同時安裝；拔掉 ta 後衝突消失，也更看得懂指標原理。最終鎖定組合 `pandas 2.3.x + FinMind 1.9.11 + pydantic 2.x + numpy 1.26 + tqdm`（見 `stock-app/backend/requirements.txt`）。環境相依的完整踩雷過程見 CLAUDE_CODE_SETUP_GUIDE.md §11.3。
-
-## 2026-06-10 22:05 [claude] 決策
-資料層抽象：DB 預設 **SQLite**（零設定即可跑），`.env` 的 `DATABASE_URL` 改一行就切到 Docker **MySQL**，程式碼完全不動。面試談資：「同一份 ORM、兩種資料庫」。
-
-## 2026-06-10 22:08 [claude] 決策
-台股行情**先由後端抓進 DB 再供前端讀**，不讓前端直接打第三方 API。理由：控 FinMind rate limit、建立自有資料層、金融資料一致性。
-
-## 2026-06-10 22:12 [claude] 雷
-SQLite 只有宣告成 `INTEGER` 的主鍵會自動遞增，用 `BigInteger` 主鍵會報 `NOT NULL constraint failed: xxx.id`。解法：`BigInteger().with_variant(Integer, "sqlite")`（MySQL→BIGINT、SQLite→可自增的 INTEGER）。跨 DB 對照另見 §11.6。
-
-## 2026-06-10 22:15 [claude] 觀念
-技術指標白話：MA=趨勢均價、RSI=超買超賣溫度計（>70 熱、<30 冷）、MACD=漲跌動能、KD=收盤價在近 9 日高低區間的位置。面試談資：「從不懂股票，到親手實作這些指標來真正理解其意義」。
+<!-- 之後每開一個新專案，就在下面新增一小段摘要，細節寫進該專案自己的 DEV_LOG.md -->
