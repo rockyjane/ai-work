@@ -133,16 +133,20 @@ GitHub 對一顆 App 有**兩件不同的事**：
 ```markdown
 # CLAUDE.md
 ## 開發者背景
-開發者的完整背景請見 @ABOUT_ME.md，協助開發時請一併納入考量。
-
-## 開發記錄（DEV_LOG）
-專案的共同開發記錄請見 @DEV_LOG.md，遇到重要的雷／觀念／決策請主動依格式追加。
+@ABOUT_ME.md
+## 開發行為規範
+@DEVELOPMENT_RULES.md
+## 記錄分流
+專案細節 → 各專案 DEV_LOG.md；跨專案摘要 → 根目錄 @DEV_LOG.md；環境/工具雷 → 本搭建指南。
 ```
 
-- 搭配檔案建議：
-  - `ABOUT_ME.md`：你的背景與溝通偏好（如「用繁體中文、術語先白話」）。
-  - `DEV_LOG.md`：跨環境／跨 session 共用的開發筆記（雷／觀念／決策）。因為跟著 Git 走，**不管在本機、雲端、或 subagent 寫的都是同一份**，解決「對話歷史會分散又可能被裁切」的問題。
-- ⚠️ 這些規則要**合併進 `main`** 後、之後從 `main` 開的新 session 才會自動生效（新 session 預設從 `main` clone）。
+- 搭配檔案（本 repo 實際採用，皆以 `@` 從 `CLAUDE.md` 引入，維持單一來源）：
+  - `ABOUT_ME.md`：開發者背景與溝通偏好。
+  - `DEVELOPMENT_RULES.md`：開發行為規範（Git／分支策略、開發流程、記錄分流）。
+  - `DEV_LOG.md`：**兩層**——根目錄放各專案「簡要摘要」；各專案資料夾放自己的詳細 `DEV_LOG.md`（完成/雷/決策/觀念/實測，帶時間戳與歸屬）。跟著 Git 走，**本機／雲端／subagent 寫的都是同一份**。
+  - `CLAUDE_CODE_SETUP_GUIDE.md`：環境／工具搭建的雷（就是本檔）。
+  - ⚠️ 確切格式與分流規則**以各檔本身為準**，其他檔只引用、不重抄，避免多處走鐘。
+- ⚠️ **自動載入發生在「新 session 開場」讀檔**（現有 session 不會中途重載）；且要讓「預設從 `main` 開」的新 session（尤其雲端／網頁版）吃到，這些檔**必須先合併進 `main`**。
 
 ---
 
@@ -189,11 +193,11 @@ claude --teleport                          # 或在網頁點「Open in CLI」複
 
 1. **GitHub 上先建一個空 repo**（雲端 session 只能用既有的 GitHub repo）。
 2. 本機 `git clone` 下來，或在 `claude.ai/code` 選這個 repo。
-3. 放入長期參考檔：`CLAUDE.md`（+ `@ABOUT_ME.md`、`@DEV_LOG.md`）。
+3. 放入長期參考檔：`CLAUDE.md`（+ `@ABOUT_ME.md`、`@DEVELOPMENT_RULES.md`、`@DEV_LOG.md`）。
 4. 確認 GitHub App 已 **Installed** 到這個 repo 並有寫入權（第 4 點）。
 5. （雲端）建立／選擇環境：設定 **Network access 等級**、環境變數、setup script。
 6. 開始交辦任務；完成後 review diff → 視需要建 PR。
-7. 遇到雷／觀念／決策 → 請 Claude 依格式追加到 `DEV_LOG.md`。
+7. 遇到值得記的事 → 依 `CLAUDE.md` 的分流規則，寫進對應的 DEV_LOG（專案細節／根摘要）或本搭建指南。
 
 ---
 
