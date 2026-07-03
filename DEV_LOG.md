@@ -36,3 +36,18 @@ Tailwind 的 JIT 模式在動態組出來的 class 名稱下不會生成樣式�
 ## 開發記錄（從這條線以下開始往下追加）
 
 <!-- 新記錄請加在這行下面 -->
+
+## 2026-06-10 22:00 [claude] 決策
+技術指標（MA/RSI/MACD/KD）改用**純 pandas 手算**，不裝 `ta` 套件。原因：`ta` 0.11 要 pandas<2.3、FinMind 1.9.11 要 pandas≥2.3，兩者無解無法同時安裝；拔掉 ta 後衝突消失，也更看得懂指標原理。最終鎖定組合 `pandas 2.3.x + FinMind 1.9.11 + pydantic 2.x + numpy 1.26 + tqdm`（見 `stock-app/backend/requirements.txt`）。環境相依的完整踩雷過程見 CLAUDE_CODE_SETUP_GUIDE.md §11.3。
+
+## 2026-06-10 22:05 [claude] 決策
+資料層抽象：DB 預設 **SQLite**（零設定即可跑），`.env` 的 `DATABASE_URL` 改一行就切到 Docker **MySQL**，程式碼完全不動。面試談資：「同一份 ORM、兩種資料庫」。
+
+## 2026-06-10 22:08 [claude] 決策
+台股行情**先由後端抓進 DB 再供前端讀**，不讓前端直接打第三方 API。理由：控 FinMind rate limit、建立自有資料層、金融資料一致性。
+
+## 2026-06-10 22:12 [claude] 雷
+SQLite 只有宣告成 `INTEGER` 的主鍵會自動遞增，用 `BigInteger` 主鍵會報 `NOT NULL constraint failed: xxx.id`。解法：`BigInteger().with_variant(Integer, "sqlite")`（MySQL→BIGINT、SQLite→可自增的 INTEGER）。跨 DB 對照另見 §11.6。
+
+## 2026-06-10 22:15 [claude] 觀念
+技術指標白話：MA=趨勢均價、RSI=超買超賣溫度計（>70 熱、<30 冷）、MACD=漲跌動能、KD=收盤價在近 9 日高低區間的位置。面試談資：「從不懂股票，到親手實作這些指標來真正理解其意義」。
