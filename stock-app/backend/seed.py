@@ -1,67 +1,104 @@
-"""一鍵匯入示範資料：抓幾檔熱門台股的近 2 年日線進資料庫。
+"""匯入示範資料。
+
+兩部分：
+1) 全台股「基本資料」→ 寫進 stocks 表（讓搜尋涵蓋全台股，成本低）。
+2) 台灣50 級別的大型權值股 → 抓近 2 年日線（K線/指標/排行用）。
 
 用法（記得先 activate venv）：
     python seed.py
 
 跑完後啟動 API：
     uvicorn app.main:app --reload
-然後開 http://127.0.0.1:8000/docs 測試。
+
+備註：FinMind 匿名額度有限，抓幾十檔可能被限流。若看到大量「抓取失敗」，
+到 https://finmindtrade.com 註冊免費 token 填進 .env 的 FINMIND_TOKEN 再重跑。
 """
+import time
 from datetime import date, timedelta
 
 from app.database import Base, engine, SessionLocal
-from app.data_fetcher import fetch_daily, fetch_stock_info, upsert_prices, upsert_stock
+from app.data_fetcher import fetch_daily, fetch_stock_info, upsert_prices
+from app.models import Stock
 
-# 示範用熱門股（代號: 名稱），抓不到官方基本資料時用這份當後備
-POPULAR = {
-    "2330": "台積電",
-    "2317": "鴻海",
-    "2454": "聯發科",
-    "2412": "中華電",
-    "2882": "國泰金",
-    "2881": "富邦金",
-    "2603": "長榮",
-    "2308": "台達電",
-    "3008": "大立光",
-    "0050": "元大台灣50",
+# 台灣50 級別的大型權值股（精選約 50 檔；名稱僅為後備，實際以 FinMind 官方資料為準）
+TW50 = {
+    "2330": "台積電", "2317": "鴻海", "2454": "聯發科", "2308": "台達電", "2382": "廣達",
+    "2891": "中信金", "2882": "國泰金", "2881": "富邦金", "2412": "中華電", "2303": "聯電",
+    "3711": "日月光投控", "2886": "兆豐金", "2884": "玉山金", "1216": "統一", "2885": "元大金",
+    "2892": "第一金", "2357": "華碩", "3034": "聯詠", "2890": "永豐金", "2345": "智邦",
+    "2379": "瑞昱", "3231": "緯創", "2883": "凱基金", "5880": "合庫金", "2887": "台新金",
+    "2327": "國巨", "3008": "大立光", "2603": "長榮", "2002": "中鋼", "1303": "南亞",
+    "1301": "台塑", "2207": "和泰車", "2880": "華南金", "4938": "和碩", "2301": "光寶科",
+    "3037": "欣興", "2395": "研華", "6505": "台塑化", "1326": "台化", "2912": "統一超",
+    "2801": "彰銀", "5871": "中租-KY", "3045": "台灣大", "2618": "長榮航", "9910": "豐泰",
+    "2474": "可成", "2356": "英業達", "2344": "華邦電", "2409": "友達", "6669": "緯穎",
 }
+
+FETCH_SLEEP = 0.6  # 每檔之間間隔（秒），降低被 FinMind 限流的機率
+
+
+def seed_all_stock_info(db):
+    """把全台股基本資料寫進 stocks 表，讓搜尋涵蓋全台股。"""
+    try:
+        info = fetch_stock_info()
+    except Exception as e:
+        print(f"(略過全台股基本資料抓取：{e})")
+        return
+    existing = {s[0] for s in db.query(Stock.stock_id).all()}
+    seen, rows = set(), []
+    for _, r in info.iterrows():
+        sid = str(r["stock_id"])
+        if sid in existing or sid in seen:
+            continue
+        seen.add(sid)
+        rows.append(Stock(
+            stock_id=sid,
+            name=r.get("stock_name", ""),
+            industry=r.get("industry_category", ""),
+            market="上市" if r.get("type") == "twse" else "上櫃",
+        ))
+    if rows:
+        db.bulk_save_objects(rows)
+        db.commit()
+    print(f"基本資料：新增 {len(rows)} 檔（stocks 表共 {len(existing) + len(rows)} 檔）")
+
+
+def ensure_tw50_rows(db):
+    """保險：萬一全量基本資料抓失敗，至少確保 TW50 有基本資料列。"""
+    existing = {s[0] for s in db.query(Stock.stock_id).all()}
+    missing = [Stock(stock_id=c, name=n, market="上市") for c, n in TW50.items() if c not in existing]
+    if missing:
+        db.bulk_save_objects(missing)
+        db.commit()
+        print(f"（後備補上 {len(missing)} 檔 TW50 基本資料）")
+
+
+def seed_daily_prices(db, start):
+    """抓 TW50 的日線，含節流與限流容錯。"""
+    ok = 0
+    for i, sid in enumerate(TW50, 1):
+        try:
+            df = fetch_daily(sid, start_date=start)
+            n = upsert_prices(db, sid, df)
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 新增 {n} 筆（共 {len(df)}）")
+            ok += 1
+        except Exception as e:
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 抓取失敗（可能限流）- {e}")
+        time.sleep(FETCH_SLEEP)
+    print(f"日線完成：{ok}/{len(TW50)} 檔成功")
+    if ok < len(TW50):
+        print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
 
 
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
+    seed_all_stock_info(db)
+    ensure_tw50_rows(db)
+
     start = (date.today() - timedelta(days=365 * 2)).isoformat()
-
-    # 1) 嘗試抓官方基本資料（產業、市場別），失敗就用後備名稱
-    info_map = {}
-    try:
-        info = fetch_stock_info()
-        for _, r in info.iterrows():
-            info_map[str(r["stock_id"])] = {
-                "name": r.get("stock_name", ""),
-                "industry": r.get("industry_category", ""),
-                "market": "上市" if r.get("type") == "twse" else "上櫃",
-            }
-        print(f"已取得 {len(info_map)} 檔股票基本資料")
-    except Exception as e:
-        print(f"(略過基本資料抓取：{e})")
-
-    # 2) 逐檔寫入基本資料 + 日線
-    for sid, fallback_name in POPULAR.items():
-        meta = info_map.get(sid, {})
-        upsert_stock(
-            db, sid,
-            name=meta.get("name") or fallback_name,
-            industry=meta.get("industry", ""),
-            market=meta.get("market", "上市"),
-        )
-        try:
-            df = fetch_daily(sid, start_date=start)
-            n = upsert_prices(db, sid, df)
-            print(f"  {sid} {fallback_name}: 新增 {n} 筆日線（共 {len(df)} 筆）")
-        except Exception as e:
-            print(f"  {sid} {fallback_name}: 抓取失敗 - {e}")
+    seed_daily_prices(db, start)
 
     db.close()
     print("\n完成！執行 `uvicorn app.main:app --reload` 啟動 API。")

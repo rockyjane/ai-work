@@ -11,7 +11,7 @@
 
 ## stock-app — 台股分析網站（重返金融業面試 DEMO + 學後端）
 
-- **狀態**：MVP 後端完成並實測通過；前端程式碼齊全，待啟動。
+- **狀態**：後端 MVP 完成並驗證；**搜尋涵蓋全台股（3115 檔）、台灣50 有 K 線**；前端程式碼齊全，待啟動。
 - **技術**：FastAPI + SQLAlchemy + 純 pandas 手算指標 + FinMind｜Vue 3 + Vite + ECharts｜DB SQLite⇄MySQL 可切。
 - **關鍵決策**：技術指標純 pandas 手算（避開 FinMind 相依衝突）、資料層抽象（一份 ORM 兩種 DB）、行情先進 DB 再供前端。
 - **詳細紀錄** → [`stock-app/DEV_LOG.md`](stock-app/DEV_LOG.md)
