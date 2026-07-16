@@ -12,7 +12,7 @@
 - `git add`、`git commit`、`git pull`、`git push`、`git checkout`、`git fetch`、`git status`、`git log`、`git diff`、開新分支。
 
 ### 必須先詢問、取得明確同意才可執行
-- **分支合併 `git merge`**：不得自行合併。判斷某分支需合併時,停下來回報三件事——為什麼要合併、合併後會帶來什麼改變、改動了哪些檔案——經使用者同意後才進行。
+- **分支合併 `git merge`**：不得自行合併。要合併時,**先用 `gh pr create` 開一個 PR**,並回報三件事——為什麼合、合併後會帶來什麼改變、改動了哪些檔——讓使用者能在 GitHub 上**先審 PR 的 diff**;**經使用者明確同意後**,才由 Claude 執行合併,合併完刪掉已完成的來源分支。
 
 ### 絕對禁止（違反會造成不可逆的工作損失）
 - `git reset --hard`（丟棄未提交變更）
@@ -38,6 +38,7 @@ main                  穩定線；只收 front-end / back-end 的合併（且須
 - **功能分支完成 → 合回它所屬的主線**（前端功能合回 `front-end`、後端合回 `back-end`），不直接合進 `main`。
 - **只有 `front-end` / `back-end` 主線才合併進 `main`**，且合併一律先問（見「必須先詢問、取得明確同意」）。
 - ⚠️ **切分支／開新分支前，先把手上未提交的改動收好**——至少 `git add` stage 起來，最好 `git commit` 或 `git stash`——**不可放著未提交的改動就切/開分支**。遇到急件、插隊的新需求、或 PR 留言很急要改碼時**尤其如此**：先 `git status` 確認、把現場 stage/stash 好，再切走去處理。
+- **根目錄治理／文檔檔**（`CLAUDE.md`、`DEVELOPMENT_RULES.md`、`ABOUT_ME.md`、`DEV_LOG.md`、`CLAUDE_CODE_SETUP_GUIDE.md`）的修改不屬於 front-end／back-end → 用短期 `docs/*` 分支**自 `main` 開**，改完 PR 回 `main`（同樣先審後合）。
 
 ---
 
