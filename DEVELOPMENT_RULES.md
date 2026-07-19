@@ -33,16 +33,16 @@ main                                        儲庫穩定線；發版才進（只
    │   └─ stock-app/back-end/feature/xxx     後端功能分支（自角色主線開 → 完成合回角色主線）
    └─ stock-app/front-end/main              前端角色主線
        └─ stock-app/front-end/feature/kline-ui
-└─ ai-content-side/main                     另一專案的整合主線
-   └─ ai-content-side/designer/main         設計師角色主線
-       └─ ai-content-side/designer/feature/hero-banner
+└─ ai-content-studio/main                   另一專案的整合主線
+   └─ ai-content-studio/designer/main       設計師角色主線
+       └─ ai-content-studio/designer/feature/hero-banner
 ```
 
 - **命名規則**：
   - 專案整合主線 = `<專案>/main`
   - 角色主線 = `<專案>/<角色>/main`
   - 功能分支 = `<專案>/<角色>/feature/<功能>`
-  - **專案名要精簡好記**（例：`ai-content-side`，不要用 `ai-content-side-business-7ijz6u` 這種雲端自動產生的長名）；**角色**依需要而定（`front-end`／`back-end`／`designer` 繪師／`writer` 編劇 等）。
+  - **專案名要精簡好記**（例：`ai-content-studio`，不要用 `ai-content-side-business-7ijz6u` 這種雲端自動產生的長名）；**角色**依需要而定（`front-end`／`back-end`／`designer` 繪師／`writer` 編劇 等）。
 - **⚠️ git 命名鐵律**：一個分支名不能同時是另一個分支名的「上層資料夾」（不能同時有 `stock-app/back-end` 和 `stock-app/back-end/feature/x`）。**所以持久主線一律以 `/main` 收尾來避開衝突**——這正是上面每條主線都掛 `/main` 的原因。
 - **合併流向（由下往上，每步先開 PR 供審、經同意才合）**：
   `.../feature/<功能>` → 該角色 `<專案>/<角色>/main` → 專案 `<專案>/main` → 儲庫 `main`。
