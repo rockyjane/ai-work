@@ -24,21 +24,26 @@
 
 ### 分支策略（重要）
 
-分支階層——功能分支從「主線」開、合回「主線」，只有主線才進 `main`：
+**一個 repo 容納多個專案**，分支用「`<專案>/<角色>`」命名分層——功能分支從「角色主線」開、合回角色主線，只有角色主線才進 `main`：
 
 ```
-main                  穩定線；只收 front-end / back-end 的合併（且須先問，見上）
-├── front-end         前端主線（自 main 開）
-│   └── feature/xxx    前端功能分支（自 front-end 開 → 完成後合回 front-end）
-└── back-end          後端主線（自 main 開）
-    └── feature/yyy    後端功能分支（自 back-end 開 → 完成後合回 back-end）
+main                                    穩定線；全專案共用，只收各「專案/角色」主線的合併（且須先問，見上）
+├── stock-app/back-end                  stock-app 後端主線（自 main 開、合回 main）
+│   └── stock-app/back-end/xxx           後端功能分支（自主線開 → 完成合回主線）
+├── stock-app/front-end                 stock-app 前端主線
+│   └── stock-app/front-end/xxx
+└── ai-content-side/designer            另一專案的角色主線（例：繪師）
+    └── ai-content-side/designer/xxx
 ```
 
-- **每次要開發新功能/任務前，先開一條新分支**，且**必須從對應主線（`front-end` 或 `back-end`）開**——不要直接從 `main` 開、也不要把所有分支都合到 `main`（那樣 main 會又雜又危險）。這樣每條分支歸屬清楚、好追是誰做了什麼。
-- **功能分支完成 → 合回它所屬的主線**（前端功能合回 `front-end`、後端合回 `back-end`），不直接合進 `main`。
-- **只有 `front-end` / `back-end` 主線才合併進 `main`**，且合併一律先問（見「必須先詢問、取得明確同意」）。
+- **命名規則**：角色主線 = `<專案>/<角色>`；功能分支 = `<專案>/<角色>/<功能>`。
+  - **專案名要精簡好記**（例：`ai-content-side`，不要用 `ai-content-side-business-7ijz6u` 這種雲端自動產生的長名）。
+  - **角色**依專案需要而定：`front-end`／`back-end`／`designer`（繪師）／`writer`（編劇）等。
+- **每次要開發新功能/任務前，先從「對應的角色主線」開一條功能分支**——不要直接從 `main` 開、也不要把功能分支直接合到 `main`（那樣 main 會又雜又危險）。這樣每條分支「哪個專案、哪個角色、做什麼」一眼可辨。
+- **功能分支完成 → 合回它所屬的角色主線**；**角色主線 → 才合進 `main`**，且合併一律先開 PR 供審、經同意才合（見「必須先詢問、取得明確同意」）。
+- ⚠️ **跨環境注意**：雲端／網頁版新 session 預設 checkout 在 `main`，**動工前先建/切到對的角色主線**、再從它開功能分支；不要一路待在 `main` 上做。
 - ⚠️ **切分支／開新分支前，先把手上未提交的改動收好**——至少 `git add` stage 起來，最好 `git commit` 或 `git stash`——**不可放著未提交的改動就切/開分支**。遇到急件、插隊的新需求、或 PR 留言很急要改碼時**尤其如此**：先 `git status` 確認、把現場 stage/stash 好，再切走去處理。
-- **根目錄治理／文檔檔**（`CLAUDE.md`、`DEVELOPMENT_RULES.md`、`ABOUT_ME.md`、`DEV_LOG.md`、`CLAUDE_CODE_SETUP_GUIDE.md`）的修改不屬於 front-end／back-end → 用短期 `docs/*` 分支**自 `main` 開**，改完 PR 回 `main`（同樣先審後合）。
+- **根目錄治理／文檔檔**（`CLAUDE.md`、`DEVELOPMENT_RULES.md`、`ABOUT_ME.md`、`DEV_LOG.md`、`CLAUDE_CODE_SETUP_GUIDE.md`）的修改不屬於任何專案角色 → 用短期 `docs/*` 分支**自 `main` 開**，改完 PR 回 `main`（同樣先審後合）。
 
 ---
 
