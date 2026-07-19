@@ -6,7 +6,9 @@
 
 # 資料庫檔（資料用 seed.py 重新產生即可）
 *.db
-*.yml
+
+# 本機 Docker compose（含開發用密碼，不進 git；日後要正式化改用環境變數帶密碼）
+docker-compose*.yml
 
 # Node
 **/node_modules/
