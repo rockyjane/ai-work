@@ -70,6 +70,8 @@ git push origin --delete claude/ai-content-side-business-7ijz6u   # 確認無誤
 - **環境／工具搭建的雷** → 寫進 `CLAUDE_CODE_SETUP_GUIDE.md` 對應章節
 
 ── ⚠️ 務必遵守事項（違反會造成不可逆損失或破壞協作）──
+※ 本訊息中的分支規範與各項紅線皆為**摘要**，**正式定義一律以 `DEVELOPMENT_RULES.md` 為準**；
+  若兩者有出入，以該檔為準（第 1 步同步完 `main` 後，該檔就是最新版）。
 1. **所有合併一律先 `gh pr create` 開 PR 供審、經使用者明確同意才合**，且方向由下往上：
    功能 → 角色主線 → 專案主線 → 儲庫 `main`。**不可自行 merge，也不可跳級直接合進 `main`**。
 2. **切／開分支前先把未提交改動收好**（`git add` + `commit`，或 `git stash`），不可放著未提交就切分支。
