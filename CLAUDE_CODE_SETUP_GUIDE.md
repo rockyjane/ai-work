@@ -227,6 +227,34 @@ git worktree remove ~/ai_work-content    # 收工清理
 - 每個資料夾各自是**獨立的 Claude Code session**（session 跟著資料夾走）——這其實是優點：各自保留自己專案的脈絡，不互相污染。
 - tp 幾個雲端 session 都行，**一個 session 配一個 worktree 資料夾**即可。
 
+#### ⚠️ 兩個容易踩的雷
+
+**雷 1：worktree 的「工作檔案」不會自動同步——只有 `.git` 是共用的。**
+
+| | 是否共用 |
+| :--- | :--- |
+| `.git`（歷史、分支、remote、stash） | ✅ **共用**：你在 A 一 commit，B 立刻「看得到」，不必 push/pull |
+| **工作檔案**（md、程式碼） | ❌ **各有實體副本，不會自動同步**：你在 A 改 `ABOUT_ME.md`，B 那份原封不動 |
+
+- **後果**：**停在舊分支的 worktree ＝ 一個讀著舊規範的 session**——它的 `CLAUDE.md`／`DEVELOPMENT_RULES.md`／`ABOUT_ME.md` 都是當初那條分支的版本，可能完全不知道後來的規範更新。
+- **對策**：要讓某個 worktree 吃到最新治理檔，**必須在該 worktree 裡**跑 `git merge origin/main`（跟同步雲端 session 是同一招，見 [`SYNC_ONLINE_SESSION.md`](SYNC_ONLINE_SESSION.md)）。
+
+**雷 2：`agents/*` 的 worktree 是 Claude Code 跑 subagent 時「自動」產生的。**
+
+- 位置長得像 `<repo>.worktrees/agents-<形容詞-動物>`、分支名像 `agents/super-chinchilla`——**不是你手動建的**，所以事後看到會完全沒印象。
+- 設計上「**沒有改動就自動清掉**」，但**只要留有未提交改動就不會被清**，於是長期殘留、還停在很舊的 commit。
+- **對策**：偶爾用 `git worktree list` 巡一下；確認沒用了就清掉：
+
+```bash
+git worktree list                    # 先看有哪些工作台、各停在哪
+git -C <路徑> status -s              # 看有沒有未提交改動
+git -C <路徑> diff                   # ⚠️ 有的話，先看清楚那筆改動是什麼
+git worktree remove <路徑> --force   # 有未提交改動時才需要 --force
+git branch -d agents/<名字>          # 分支若已併入 main，-d 會安全刪除
+```
+
+> ⚠️ 加 `--force` 等於**丟棄那筆未提交改動**。務必先用 `git diff` 確認它的內容**已經存在於別處**（例如早已合進 `main`），再動手刪。
+
 ---
 
 ## 9. 開新專案的搭配流程（推薦順序）
