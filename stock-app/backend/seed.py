@@ -48,13 +48,19 @@ def seed_all_stock_info(db):
     seen, rows = set(), []
     for _, r in info.iterrows():
         sid = str(r["stock_id"])
+        industry = r.get("industry_category", "")
+        # FinMind 會混入「指數」列（industry=Index，代碼像 Food、TradingConsumersGoods，
+        # 非個股且字串超長）。跳過它們；並用長度保險，避免超長代碼撐爆 stock_id(String(10))。
+        # 註：SQLite 不強制 VARCHAR 長度、MySQL 會，所以這雷只在 MySQL 現形。
+        if industry == "Index" or len(sid) > 10:
+            continue
         if sid in existing or sid in seen:
             continue
         seen.add(sid)
         rows.append(Stock(
             stock_id=sid,
             name=r.get("stock_name", ""),
-            industry=r.get("industry_category", ""),
+            industry=industry,
             market="上市" if r.get("type") == "twse" else "上櫃",
         ))
     if rows:
