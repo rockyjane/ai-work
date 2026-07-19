@@ -6,6 +6,7 @@
 
 # 資料庫檔（資料用 seed.py 重新產生即可）
 *.db
+*.yml
 
 # Node
 **/node_modules/
