@@ -24,26 +24,33 @@
 
 ### 分支策略（重要）
 
-**一個 repo 容納多個專案**，分支用「`<專案>/<角色>`」命名分層——功能分支從「角色主線」開、合回角色主線，只有角色主線才進 `main`：
+**一個 repo 容納多個專案**，分支分四層。核心規則一句話：**每條「持久主線」（專案的、角色的）都以 `/main` 收尾，功能分支一律走 `/feature/<功能>`**；合併由下往上，只有上一層的 `main` 才收下一層合併。
 
 ```
-main                                    穩定線；全專案共用，只收各「專案/角色」主線的合併（且須先問，見上）
-├── stock-app/back-end                  stock-app 後端主線（自 main 開、合回 main）
-│   └── stock-app/back-end/xxx           後端功能分支（自主線開 → 完成合回主線）
-├── stock-app/front-end                 stock-app 前端主線
-│   └── stock-app/front-end/xxx
-└── ai-content-side/designer            另一專案的角色主線（例：繪師）
-    └── ai-content-side/designer/xxx
+main                                        儲庫穩定線；發版才進（只收各「專案/main」的合併）
+└─ stock-app/main                           專案整合主線（品管閘門；大改版/完成時，角色主線合這）
+   ├─ stock-app/back-end/main               後端角色主線（日常功能都合這）
+   │   └─ stock-app/back-end/feature/xxx     後端功能分支（自角色主線開 → 完成合回角色主線）
+   └─ stock-app/front-end/main              前端角色主線
+       └─ stock-app/front-end/feature/kline-ui
+└─ ai-content-side/main                     另一專案的整合主線
+   └─ ai-content-side/designer/main         設計師角色主線
+       └─ ai-content-side/designer/feature/hero-banner
 ```
 
-- **命名規則**：角色主線 = `<專案>/<角色>`；功能分支 = `<專案>/<角色>/<功能>`。
-  - **專案名要精簡好記**（例：`ai-content-side`，不要用 `ai-content-side-business-7ijz6u` 這種雲端自動產生的長名）。
-  - **角色**依專案需要而定：`front-end`／`back-end`／`designer`（繪師）／`writer`（編劇）等。
-- **每次要開發新功能/任務前，先從「對應的角色主線」開一條功能分支**——不要直接從 `main` 開、也不要把功能分支直接合到 `main`（那樣 main 會又雜又危險）。這樣每條分支「哪個專案、哪個角色、做什麼」一眼可辨。
-- **功能分支完成 → 合回它所屬的角色主線**；**角色主線 → 才合進 `main`**，且合併一律先開 PR 供審、經同意才合（見「必須先詢問、取得明確同意」）。
-- ⚠️ **跨環境注意**：雲端／網頁版新 session 預設 checkout 在 `main`，**動工前先建/切到對的角色主線**、再從它開功能分支；不要一路待在 `main` 上做。
+- **命名規則**：
+  - 專案整合主線 = `<專案>/main`
+  - 角色主線 = `<專案>/<角色>/main`
+  - 功能分支 = `<專案>/<角色>/feature/<功能>`
+  - **專案名要精簡好記**（例：`ai-content-side`，不要用 `ai-content-side-business-7ijz6u` 這種雲端自動產生的長名）；**角色**依需要而定（`front-end`／`back-end`／`designer` 繪師／`writer` 編劇 等）。
+- **⚠️ git 命名鐵律**：一個分支名不能同時是另一個分支名的「上層資料夾」（不能同時有 `stock-app/back-end` 和 `stock-app/back-end/feature/x`）。**所以持久主線一律以 `/main` 收尾來避開衝突**——這正是上面每條主線都掛 `/main` 的原因。
+- **合併流向（由下往上，每步先開 PR 供審、經同意才合）**：
+  `.../feature/<功能>` → 該角色 `<專案>/<角色>/main` → 專案 `<專案>/main` → 儲庫 `main`。
+  - **日常只在「功能 → 角色主線」之間跑**；「角色→專案」「專案→儲庫」只在里程碑／發版時做。
+- **每次開發新功能前**：先從「對應的角色主線」開一條功能分支——不要直接從 `main` 或專案主線開、也不要跳級直接合上去。這樣每條分支「哪個專案、哪個角色、做什麼」一眼可辨。
+- ⚠️ **跨環境注意**：雲端／網頁版新 session 預設 checkout 在儲庫 `main`，**動工前先建/切到對的角色主線**（例：`stock-app/back-end/main`），再從它開功能分支；不要一路待在 `main` 上做。
 - ⚠️ **切分支／開新分支前，先把手上未提交的改動收好**——至少 `git add` stage 起來，最好 `git commit` 或 `git stash`——**不可放著未提交的改動就切/開分支**。遇到急件、插隊的新需求、或 PR 留言很急要改碼時**尤其如此**：先 `git status` 確認、把現場 stage/stash 好，再切走去處理。
-- **根目錄治理／文檔檔**（`CLAUDE.md`、`DEVELOPMENT_RULES.md`、`ABOUT_ME.md`、`DEV_LOG.md`、`CLAUDE_CODE_SETUP_GUIDE.md`）的修改不屬於任何專案角色 → 用短期 `docs/*` 分支**自 `main` 開**，改完 PR 回 `main`（同樣先審後合）。
+- **根目錄治理／文檔檔**（`CLAUDE.md`、`DEVELOPMENT_RULES.md`、`ABOUT_ME.md`、`DEV_LOG.md`、`CLAUDE_CODE_SETUP_GUIDE.md`）的修改不屬於任何專案 → 用短期 `docs/*` 分支**自 `main` 開**，改完 PR 回 `main`（同樣先審後合）。
 
 ---
 
