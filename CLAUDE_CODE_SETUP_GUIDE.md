@@ -147,6 +147,8 @@ GitHub 對一顆 App 有**兩件不同的事**：
   - `CLAUDE_CODE_SETUP_GUIDE.md`：環境／工具搭建的雷（就是本檔）。
   - ⚠️ 確切格式與分流規則**以各檔本身為準**，其他檔只引用、不重抄，避免多處走鐘。
 - ⚠️ **自動載入發生在「新 session 開場」讀檔**（現有 session 不會中途重載）；且要讓「預設從 `main` 開」的新 session（尤其雲端／網頁版）吃到，這些檔**必須先合併進 `main`**。
+- ⚠️ **已經在跑的雲端 session 不會自動吃到後來的更新**（它手上是當初 clone 的舊版：舊 `ABOUT_ME`、舊分支策略…）。
+  要讓它同步，用 [`SYNC_ONLINE_SESSION.md`](SYNC_ONLINE_SESSION.md) 裡那段現成訊息**貼給它跑**即可（含同步指令、分支改名、注意事項）。
 
 ---
 
@@ -186,6 +188,72 @@ claude --teleport                          # 或在網頁點「Open in CLI」複
 ```
 
 > 原理：teleport 會 `git checkout` 分支，而 git 分支狀態是「跟著資料夾」的。給雲端 session 一個獨立資料夾（worktree 或另 clone），兩邊就不會互相切分支打架。
+
+### 8.1 多專案並行開發：一個 repo、多個「工作台」（worktree）
+
+> **先分清楚兩個不同的軸**，這是最容易搞混的地方：
+> - **資料夾結構**（repo 裡有什麼）：`ai_work/` 底下就是 `stock-app/`、`ai-content-studio/`…加上根目錄的治理 md。**每一條分支都含這整棵樹**，所以所有專案都吃得到那些 md。
+> - **分支狀態**（磁碟上此刻攤開的是哪個版本）：**一個資料夾同一時間只能 checkout 一條分支**。切到 `ai-content-studio/writer/main`，整個資料夾（含 `stock-app/`）都會變成那條分支的版本。
+
+**worktree 是什麼（白話）**：同一個 git repo 長出**多個工作資料夾**，每個各自 checkout 不同分支。它們**共用同一份 `.git`**（歷史、分支、remote 全共享，任一邊 `fetch`／`push` 另一邊都看得到），但切分支互不干擾——「**一個倉庫、多個工作台**」。
+
+⚠️ **worktree 不是殘缺資料夾**：它是**完整的一整棵樹**，`CLAUDE.md`、`DEVELOPMENT_RULES.md`、所有專案資料夾都在，治理檔照樣自動載入。
+
+**什麼時候才需要開第二個 worktree？**
+
+| 情境 | 需要嗎 |
+| :--- | :--- |
+| **輪流做**（先弄 stock-app，晚點再弄 ai-content-studio） | **不用**。一個 `ai_work` 就夠，commit／stash 收好後 `git checkout` 切過去即可 |
+| **同時做**（雲端 tp 下來的 session 正停在 A 專案分支，你又要同時使喚本機 session 做 B 專案） | **要**。兩個 session 得同時攤開兩條不同分支 |
+
+**多專案並行的建議配置**：
+
+| 資料夾 | 分支 | 用途 |
+| :--- | :--- | :--- |
+| `~/ai_work` | `stock-app/...` | 本機主力 |
+| `~/ai_work-content` | `ai-content-studio/...` | 雲端 tp 下來的 session |
+
+```bash
+git fetch origin
+git worktree add ~/ai_work-content ai-content-studio/writer/feature/story-bible
+cd ~/ai_work-content
+claude --teleport
+
+git worktree list                        # 看目前有哪些工作台
+git worktree remove ~/ai_work-content    # 收工清理
+```
+
+- ⚠️ **同一條分支不能同時被兩個 worktree checkout**（git 會直接擋）。不同專案本來就用不同分支，天然不衝突。
+- 每個資料夾各自是**獨立的 Claude Code session**（session 跟著資料夾走）——這其實是優點：各自保留自己專案的脈絡，不互相污染。
+- tp 幾個雲端 session 都行，**一個 session 配一個 worktree 資料夾**即可。
+
+#### ⚠️ 兩個容易踩的雷
+
+**雷 1：worktree 的「工作檔案」不會自動同步——只有 `.git` 是共用的。**
+
+| | 是否共用 |
+| :--- | :--- |
+| `.git`（歷史、分支、remote、stash） | ✅ **共用**：你在 A 一 commit，B 立刻「看得到」，不必 push/pull |
+| **工作檔案**（md、程式碼） | ❌ **各有實體副本，不會自動同步**：你在 A 改 `ABOUT_ME.md`，B 那份原封不動 |
+
+- **後果**：**停在舊分支的 worktree ＝ 一個讀著舊規範的 session**——它的 `CLAUDE.md`／`DEVELOPMENT_RULES.md`／`ABOUT_ME.md` 都是當初那條分支的版本，可能完全不知道後來的規範更新。
+- **對策**：要讓某個 worktree 吃到最新治理檔，**必須在該 worktree 裡**跑 `git merge origin/main`（跟同步雲端 session 是同一招，見 [`SYNC_ONLINE_SESSION.md`](SYNC_ONLINE_SESSION.md)）。
+
+**雷 2：`agents/*` 的 worktree 是 Claude Code 跑 subagent 時「自動」產生的。**
+
+- 位置長得像 `<repo>.worktrees/agents-<形容詞-動物>`、分支名像 `agents/super-chinchilla`——**不是你手動建的**，所以事後看到會完全沒印象。
+- 設計上「**沒有改動就自動清掉**」，但**只要留有未提交改動就不會被清**，於是長期殘留、還停在很舊的 commit。
+- **對策**：偶爾用 `git worktree list` 巡一下；確認沒用了就清掉：
+
+```bash
+git worktree list                    # 先看有哪些工作台、各停在哪
+git -C <路徑> status -s              # 看有沒有未提交改動
+git -C <路徑> diff                   # ⚠️ 有的話，先看清楚那筆改動是什麼
+git worktree remove <路徑> --force   # 有未提交改動時才需要 --force
+git branch -d agents/<名字>          # 分支若已併入 main，-d 會安全刪除
+```
+
+> ⚠️ 加 `--force` 等於**丟棄那筆未提交改動**。務必先用 `git diff` 確認它的內容**已經存在於別處**（例如早已合進 `main`），再動手刪。
 
 ---
 
