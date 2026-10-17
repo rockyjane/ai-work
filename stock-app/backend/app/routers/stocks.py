@@ -5,7 +5,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Stock, DailyPrice
+from ..models import Stock, DailyPrice, Valuation
+from ..schemas import ValuationOut
 from ..indicators import compute_indicators
 
 router = APIRouter(tags=["stocks"])
@@ -73,6 +74,33 @@ def get_prices(
         "volumes": df["volume"].tolist(),
         "indicators": ind,
     }
+
+
+@router.get("/stocks/{stock_id}/valuation", response_model=list[ValuationOut])
+def get_valuation(
+    stock_id: str,
+    limit: int = Query(60, description="最近幾個交易日的評價指標"),
+    db: Session = Depends(get_db),
+):
+    """回傳個股每日評價指標（本益比 PER / 淨值比 PBR / 殖利率），由新到舊。"""
+    rows = (
+        db.query(Valuation)
+        .filter(Valuation.stock_id == stock_id)
+        .order_by(Valuation.date.desc())
+        .limit(limit)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="這檔股票還沒有評價資料，請先執行 seed.py 匯入")
+    return [
+        ValuationOut(
+            date=r.date.isoformat(),
+            per=float(r.per) if r.per is not None else None,
+            pbr=float(r.pbr) if r.pbr is not None else None,
+            dividend_yield=float(r.dividend_yield) if r.dividend_yield is not None else None,
+        )
+        for r in rows
+    ]
 
 
 @router.get("/rankings")
