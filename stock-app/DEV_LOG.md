@@ -27,6 +27,12 @@
 ### 2026-07-19 17:30 [claude] [後端] 完成
 把資料庫從 SQLite **實際切換到 Docker MySQL 8.4 並跑通**：`.env` 改一行 `DATABASE_URL` → 重跑 seed → 全台股 **3088 檔**可搜尋、台灣50 共 **51 檔**日線 **24570 筆**進 MySQL；四組 API 端到端實測皆讀 MySQL 正常。（過程逼出一個跨 DB 真雷，見 §二；前端仍待啟動。）
 
+### 2026-10-17 [claude] [後端] 完成
+新增**財報評價基本面**第一塊：PER（本益比）/ PBR（股價淨值比）/ 殖利率。後端按既有四層對稱擴充——`models.Valuation` 表、`data_fetcher.fetch_per_pbr`+`upsert_valuation`、`schemas.ValuationOut`、API `GET /api/stocks/{id}/valuation`，`seed.py` 讓台灣50 順抓近一年評價資料。資料源 FinMind `taiwan_stock_per_pbr`（一個接口同時給三個指標）。
+
+### 2026-10-19 [claude] [前端] 完成
+評價指標**上前端**：個股頁（`StockDetailView.vue`）K 線上方新增「基本面」卡片，顯示最新 PER/PBR/殖利率，各欄位附 tooltip 白話說明（延續零基礎友善風格）。`api/index.ts` 加 `Valuation` 型別與 `getValuation()`。評價獨立抓取並容錯：抓不到只是不顯示卡片、不影響 K 線。台積電/鴻海個股頁實際瀏覽器驗證卡片正常顯示。
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -87,6 +93,26 @@
 - **`.env` vs `.env.example`**：程式只讀 `.env`（被 gitignore、放真值）；`.env.example` 是給人照抄的範本、會進 git、只放佔位字串（本次曾誤改到 example 而不生效）。
 - **最小權限**：連線用 `stock_user`（僅 stock_db 有權）而非 `root`，字串外洩傷害面較小。
 
+### 2026-10-17 [claude] [金融] 觀念
+**財報評價指標白話（金融）。** K 線看「行情」，評價指標看「體質／貴不貴」：
+- **EPS 每股盈餘**：公司每一股幫你賺多少錢，越高越會賺。
+- **PER 本益比** = 股價 ÷ EPS：你付的價格是它一年獲利的幾倍，判斷「貴不貴」（相對低＝相對便宜）。
+- **PBR 股價淨值比** = 股價 ÷ 每股淨值：股價相對公司「家底」幾倍。
+- **殖利率(%)** = 年配息 ÷ 股價：把錢放這檔一年領幾 % 股息，存股族最看。
+- 這些**逐日變動**（分母的 EPS/淨值短期固定，分子股價天天動）。虧損公司 PER 無意義（可能為負或空），所以欄位允許 null。
+
+### 2026-10-17 [claude] [後端] 觀念
+**後端分層設計（加 valuation 時的實作心法）。**
+- **fetch 與 upsert 單一職責**：`fetch_per_pbr` 只負責「抓＋把外部欄位翻譯成自家格式」（大寫 `PER`→`per`），`upsert_valuation` 只負責「寫 DB、跳過已存在」。拆開後換資料源只改 fetch、換 DB 只改 upsert，好測好維護。
+- **schema＝後端版的「資料長相合約」**：`ValuationOut`（Pydantic）規定 API 回傳 JSON 的欄位，自動驗證＋自動產 `/docs` 文件——概念同前端 TS interface，但執行期會真的驗證。
+- **冪等 upsert**：靠 `(stock_id, date)` UniqueConstraint ＋ 先撈 existing 再跳過，重複跑不產生重複列。
+
+### 2026-10-19 [claude] [全端] 觀念
+**前後端有相依時，後端要先往上合到「共同主線」，前端分支才拿得到。**
+- **現象**：前端分支（自 `stock-app/main` 開）要顯示評價，但在這個工作樹打 API 卻 404、路由消失。
+- **原因**：valuation 後端當時只在 `stock-app/back-end/main`，還沒合進 `stock-app/main`；而「**一個資料夾同一時間只攤開一條分支**」——切到前端分支後，整個資料夾（含 backend）都是前端分支的版本，那裡的 `routers/stocks.py` 是沒有 valuation 的舊版，`--reload` 還因此熱載成舊版。
+- **解法／心法**：先把後端那塊 `back-end/main → stock-app/main`（里程碑往上合），前端分支再 `git merge stock-app/main`，工作樹就同時具備前後端新程式。**跨角色相依的功能，整合點要上移到兩者共同的主線。**
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -113,10 +139,19 @@ API：/api/stocks?q=2330→台積電、中文「台積」→台積電、/api/ran
 seed 冪等：已存在的 10 檔日線「新增 0 筆」（upsert 跳過），台灣50 50/50 成功
 ```
 
+### 2026-10-17 [claude] [後端] 實測
+**財報評價 API 端到端驗證（資料源＝MySQL）：**
+```
+seed：台灣50 評價指標 50/50 檔成功，valuations 共 12100 筆、涵蓋 50 檔
+2330 最新：2026-10-16  PER 28.05  PBR 9.76  殖利率 0.91%
+API：GET /api/stocks/2330/valuation?limit=3 → 正確回近 3 日 PER/PBR/殖利率
+     查無資料的 9999 → 正確回 404「請先執行 seed.py 匯入」
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
-- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線資料**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
-- **前端**：程式碼齊全，待 `cd frontend && nvm use 20 && npm install && npm run dev`。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ **下一步：加財報基本面** → 最後用 Spring Boot 重寫後端做對照。
+- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
+- **前端**：K 線/搜尋/自選股已點測正常；**個股頁基本面卡片（PER/PBR/殖利率）已呈現並驗證**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率（後端）~~（✅ 2026-10-17）→ ~~評價指標上前端~~（✅ 2026-10-19）→ **下一步：補 EPS/月營收** → 最後用 Spring Boot 重寫後端做對照。

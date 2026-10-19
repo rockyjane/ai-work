@@ -13,6 +13,16 @@ class StockOut(BaseModel):
         from_attributes = True
 
 
+class ValuationOut(BaseModel):
+    date: str
+    per: Optional[float] = None
+    pbr: Optional[float] = None
+    dividend_yield: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
 class WatchlistCreate(BaseModel):
     stock_id: str
     note: Optional[str] = ""

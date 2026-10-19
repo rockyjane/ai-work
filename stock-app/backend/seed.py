@@ -17,7 +17,9 @@ import time
 from datetime import date, timedelta
 
 from app.database import Base, engine, SessionLocal
-from app.data_fetcher import fetch_daily, fetch_stock_info, upsert_prices
+from app.data_fetcher import (
+    fetch_daily, fetch_stock_info, fetch_per_pbr, upsert_prices, upsert_valuation,
+)
 from app.models import Stock
 
 # 台灣50 級別的大型權值股（精選約 50 檔；名稱僅為後備，實際以 FinMind 官方資料為準）
@@ -96,6 +98,23 @@ def seed_daily_prices(db, start):
         print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
 
 
+def seed_valuations(db, start):
+    """抓 TW50 的每日評價指標（PER/PBR/殖利率），含節流與限流容錯。"""
+    ok = 0
+    for i, sid in enumerate(TW50, 1):
+        try:
+            df = fetch_per_pbr(sid, start_date=start)
+            n = upsert_valuation(db, sid, df)
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 新增 {n} 筆（共 {len(df)}）")
+            ok += 1
+        except Exception as e:
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 抓取失敗（可能限流）- {e}")
+        time.sleep(FETCH_SLEEP)
+    print(f"評價指標完成：{ok}/{len(TW50)} 檔成功")
+    if ok < len(TW50):
+        print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
+
+
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -104,7 +123,12 @@ def main():
     ensure_tw50_rows(db)
 
     start = (date.today() - timedelta(days=365 * 2)).isoformat()
+    print("\n=== 抓日線 ===")
     seed_daily_prices(db, start)
+    # 評價指標只看近期即可，抓近一年就夠（省時間、少限流）
+    val_start = (date.today() - timedelta(days=365)).isoformat()
+    print("\n=== 抓評價指標（PER/PBR/殖利率）===")
+    seed_valuations(db, val_start)
 
     db.close()
     print("\n完成！執行 `uvicorn app.main:app --reload` 啟動 API。")
