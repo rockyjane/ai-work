@@ -2,7 +2,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStock, getPrices, addWatchlist, type Stock, type PriceData } from '../api'
+import { getStock, getPrices, getValuation, addWatchlist, type Stock, type PriceData, type Valuation } from '../api'
 import KLineChart from '../components/KLineChart.vue'
 
 const route = useRoute()
@@ -10,8 +10,16 @@ const router = useRouter()
 
 const stock = ref<Stock | null>(null)
 const data = ref<PriceData | null>(null)
+const valuation = ref<Valuation | null>(null)   // 最新一筆評價指標
 const loading = ref(false)
 const sub = ref<'rsi' | 'macd' | 'kd'>('kd')
+
+// 評價指標白話（滑鼠移上去看）
+const valuationHint: Record<string, string> = {
+  per: '本益比(PER)＝股價 ÷ 每股盈餘。代表你付的價格是它一年獲利的幾倍，數字越低相對越「便宜」。',
+  pbr: '股價淨值比(PBR)＝股價 ÷ 每股淨值。股價是公司「家底」的幾倍，低於 1 代表股價比帳面價值還低。',
+  dividend_yield: '殖利率(%)＝一年配息 ÷ 股價。把錢放這檔一年大約領幾 % 股息，存股族最在意這個。',
+}
 
 // 用白話解釋給零基礎的人看
 const indicatorHint: Record<string, string> = {
@@ -29,6 +37,13 @@ async function load(id: string) {
     ElMessage.error(e?.response?.data?.detail || '讀取失敗')
   } finally {
     loading.value = false
+  }
+  // 評價指標獨立抓：抓不到（例如該檔沒資料）只是不顯示這張卡，不影響 K 線
+  try {
+    const rows = await getValuation(id, 1)
+    valuation.value = rows[0] ?? null
+  } catch {
+    valuation.value = null
   }
 }
 
@@ -72,6 +87,33 @@ watch(() => route.params.id, (id) => id && load(id as string))
       </el-collapse-item>
     </el-collapse>
 
+    <el-card class="val-card" v-if="valuation">
+      <div class="val-head">
+        <span class="val-title">基本面（{{ valuation.date }}）</span>
+        <span class="val-sub">看「體質／貴不貴」，和左邊 K 線的「行情」互補</span>
+      </div>
+      <div class="val-grid">
+        <el-tooltip :content="valuationHint.per" placement="bottom">
+          <div class="val-item">
+            <div class="val-label">本益比 PER</div>
+            <div class="val-num">{{ valuation.per ?? '—' }}</div>
+          </div>
+        </el-tooltip>
+        <el-tooltip :content="valuationHint.pbr" placement="bottom">
+          <div class="val-item">
+            <div class="val-label">股價淨值比 PBR</div>
+            <div class="val-num">{{ valuation.pbr ?? '—' }}</div>
+          </div>
+        </el-tooltip>
+        <el-tooltip :content="valuationHint.dividend_yield" placement="bottom">
+          <div class="val-item">
+            <div class="val-label">殖利率</div>
+            <div class="val-num">{{ valuation.dividend_yield != null ? valuation.dividend_yield + '%' : '—' }}</div>
+          </div>
+        </el-tooltip>
+      </div>
+    </el-card>
+
     <el-card class="chart-card" v-if="data">
       <div class="toolbar">
         <span class="label">下方指標：</span>
@@ -95,6 +137,14 @@ watch(() => route.params.id, (id) => id && load(id as string))
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
 .label { font-weight: 600; }
 .hint { color: #909399; font-size: 13px; }
+.val-card { margin-bottom: 12px; }
+.val-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.val-title { font-weight: 700; font-size: 15px; }
+.val-sub { color: #909399; font-size: 12px; }
+.val-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+.val-item { flex: 1; min-width: 120px; background: #f7f8fa; border-radius: 8px; padding: 12px 14px; cursor: help; }
+.val-label { color: #606266; font-size: 13px; margin-bottom: 4px; }
+.val-num { font-size: 22px; font-weight: 700; color: #303133; }
 .help { margin-bottom: 12px; }
 .help-list { margin: 0; padding-left: 18px; line-height: 1.9; color: #555; }
 .up { color: #e53935; font-weight: 600; }
