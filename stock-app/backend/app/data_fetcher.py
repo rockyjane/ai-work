@@ -10,7 +10,7 @@ import pandas as pd
 from FinMind.data import DataLoader
 from sqlalchemy.orm import Session
 
-from .models import Stock, DailyPrice, Valuation, Financial
+from .models import Stock, DailyPrice, Valuation, Financial, Revenue
 
 
 def _loader() -> DataLoader:
@@ -70,6 +70,22 @@ def fetch_financials(stock_id: str, start_date: str, end_date: str | None = None
     eps = eps.rename(columns={"value": "eps"})
     eps["date"] = pd.to_datetime(eps["date"]).dt.date
     return eps[["date", "eps"]]
+
+
+def fetch_revenue(stock_id: str, start_date: str, end_date: str | None = None) -> pd.DataFrame:
+    """抓單一股票的每月營收，回傳整理好的 DataFrame（year, month, revenue）。
+
+    FinMind taiwan_stock_month_revenue 欄位含 revenue_year / revenue_month / revenue。
+    只取這三欄並改名，交給 upsert 寫入。
+    """
+    api = _loader()
+    df = api.taiwan_stock_month_revenue(
+        stock_id=stock_id, start_date=start_date, end_date=end_date,
+    )
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["year", "month", "revenue"])
+    df = df.rename(columns={"revenue_year": "year", "revenue_month": "month"})
+    return df[["year", "month", "revenue"]]
 
 
 def fetch_stock_info() -> pd.DataFrame:
@@ -136,6 +152,28 @@ def upsert_financials(db: Session, stock_id: str, df: pd.DataFrame) -> int:
         if r["date"] in existing:
             continue
         rows.append(Financial(stock_id=stock_id, date=r["date"], eps=r["eps"]))
+    if rows:
+        db.bulk_save_objects(rows)
+        db.commit()
+    return len(rows)
+
+
+def upsert_revenue(db: Session, stock_id: str, df: pd.DataFrame) -> int:
+    """把每月營收寫進 DB，已存在的 (年,月) 跳過。回傳新增筆數。"""
+    if df.empty:
+        return 0
+    existing = {
+        (r[0], r[1])
+        for r in db.query(Revenue.year, Revenue.month).filter(Revenue.stock_id == stock_id).all()
+    }
+    rows = []
+    for _, r in df.iterrows():
+        key = (int(r["year"]), int(r["month"]))
+        if key in existing:
+            continue
+        rows.append(Revenue(
+            stock_id=stock_id, year=key[0], month=key[1], revenue=int(r["revenue"]),
+        ))
     if rows:
         db.bulk_save_objects(rows)
         db.commit()

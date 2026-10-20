@@ -36,6 +36,9 @@
 ### 2026-10-20 [claude] [後端] 完成
 新增**季度財報 EPS（每股盈餘）**。因財報是「每季」頻率（非每日），獨立開 `models.Financial` 表（不塞進每日的 valuations）；`data_fetcher.fetch_financials`（篩 FinMind 長格式 `type==EPS`）+ `upsert_financials`、`schemas.FinancialOut`、API `GET /api/stocks/{id}/financials`（預設近 12 季），`seed.py` 台灣50 順抓近 3 年 EPS。資料源 FinMind `taiwan_stock_financial_statement`。
 
+### 2026-10-22 [claude] [後端] 完成
+新增**每月營收**（第三種頻率：每月，繼每日評價、每季 EPS 之後）。獨立開 `models.Revenue` 表（`(stock_id,year,month)` 唯一，只存原始營收金額）；`data_fetcher.fetch_revenue`+`upsert_revenue`、`schemas.RevenueOut`、API `GET /api/stocks/{id}/revenue`。**YoY（年增率）/ MoM（月增率）不存 DB、在 API 即時計算**。`seed.py` 台灣50 順抓近 3 年。資料源 FinMind `taiwan_stock_month_revenue`。
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -121,6 +124,13 @@
 - **每日 vs 每季分表**：PER/PBR/殖利率是每日資料（放 `valuations`），EPS 是每季資料（放 `financials`）。硬塞同一張表會有大量空值；依「資料更新頻率」分表，每張表乾淨、查詢也單純。這也影響 API 預設筆數（valuation `limit=60` 天、financial `limit=12` 季）。
 - **寬格式 vs 長格式**：`per_pbr` 是寬格式（一列含 PER/PBR/殖利率多欄）；`financial_statement` 是長格式（每個財報項目一列，用 `type` 欄標示）。長格式要先篩：`df[df["type"]=="EPS"]` 這招叫**布林遮罩**——`df["type"]=="EPS"` 產生一串 True/False，`df[布林]` 只留 True 的列，等同 SQL 的 `WHERE type='EPS'`。
 
+### 2026-10-22 [claude] [程式＋金融] 觀念
+**衍生值即算不存＋YoY/MoM 的計算與跨年邊界（加月營收時學到）。**
+- **原始值存 DB、衍生值即算**：月營收只存原始金額，YoY/MoM 在 API 回傳時算。因為成長率是「推導得出」的值，存了反而有「資料不一致」風險（改了 revenue 忘了改成長率）；即算永遠正確。
+- **成長率白話（金融）**：`YoY 年增率`＝跟**去年同月**比（排除淡旺季，看真實成長，最常看）；`MoM 月增率`＝跟**上個月**比（短期動能）。公式 `(本期−基準)/基準×100`。
+- **查表加速**：算 YoY/MoM 要反覆找「去年同月/上個月」，先把全部撈成 `{(年,月):營收}` dict，查詢 O(1)——用空間換時間。
+- **跨年邊界雷**：1 月的「上個月」是**去年 12 月**不是「0 月」；`month==1` 要特判成 `(year-1, 12)`，否則 1 月的 MoM 永遠算錯。除法前也要擋 base 為 0/None（最早幾個月沒有 YoY 屬正常，回 null）。
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -165,10 +175,20 @@ API：GET /api/stocks/2330/financials?limit=4 → 正確回近 4 季 EPS
      查無資料的 9999 → 正確回 404
 ```
 
+### 2026-10-22 [claude] [後端] 實測
+**月營收 API 端到端驗證（含即時 YoY/MoM，資料源＝MySQL）：**
+```
+seed：台灣50 月營收 50/50 成功，revenues 共 1800 筆（50 檔 × 36 月）
+2330 2026/9：營收 5119 億  YoY +54.65%  MoM -0.57%
+     2026/8：營收 5148 億  YoY +53.32%  MoM +10.1%
+手算驗證 MoM：(5119-5148)/5148 = -0.57% ✓
+查無資料的 9999 → 正確 404
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
-- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
-- **前端**：K 線/搜尋/自選股已點測正常；**個股頁基本面卡片（PER/PBR/殖利率）已呈現並驗證**；EPS 尚未上前端。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率（後端）~~（✅ 2026-10-17）→ ~~評價指標上前端~~（✅ 2026-10-19）→ ~~EPS 後端~~（✅ 2026-10-20）→ **下一步：EPS 上前端（可做趨勢小圖）、或補月營收** → 最後用 Spring Boot 重寫後端做對照。
+- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
+- **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖已呈現；**月營收尚未上前端**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收後端~~（✅ 2026-10-22）→ **下一步：月營收上前端、或啟動 Spring Boot 重寫後端做對照**。
