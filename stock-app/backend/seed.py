@@ -18,7 +18,8 @@ from datetime import date, timedelta
 
 from app.database import Base, engine, SessionLocal
 from app.data_fetcher import (
-    fetch_daily, fetch_stock_info, fetch_per_pbr, upsert_prices, upsert_valuation,
+    fetch_daily, fetch_stock_info, fetch_per_pbr, fetch_financials,
+    upsert_prices, upsert_valuation, upsert_financials,
 )
 from app.models import Stock
 
@@ -115,6 +116,23 @@ def seed_valuations(db, start):
         print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
 
 
+def seed_financials(db, start):
+    """抓 TW50 的季度財報（EPS），含節流與限流容錯。"""
+    ok = 0
+    for i, sid in enumerate(TW50, 1):
+        try:
+            df = fetch_financials(sid, start_date=start)
+            n = upsert_financials(db, sid, df)
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 新增 {n} 筆（共 {len(df)}）")
+            ok += 1
+        except Exception as e:
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 抓取失敗（可能限流）- {e}")
+        time.sleep(FETCH_SLEEP)
+    print(f"財報(EPS)完成：{ok}/{len(TW50)} 檔成功")
+    if ok < len(TW50):
+        print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
+
+
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -129,6 +147,10 @@ def main():
     val_start = (date.today() - timedelta(days=365)).isoformat()
     print("\n=== 抓評價指標（PER/PBR/殖利率）===")
     seed_valuations(db, val_start)
+    # 財報每季一筆，抓近 3 年（約 12 季）看得出趨勢
+    fin_start = (date.today() - timedelta(days=365 * 3)).isoformat()
+    print("\n=== 抓季度財報（EPS）===")
+    seed_financials(db, fin_start)
 
     db.close()
     print("\n完成！執行 `uvicorn app.main:app --reload` 啟動 API。")

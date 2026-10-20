@@ -5,8 +5,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Stock, DailyPrice, Valuation
-from ..schemas import ValuationOut
+from ..models import Stock, DailyPrice, Valuation, Financial
+from ..schemas import ValuationOut, FinancialOut
 from ..indicators import compute_indicators
 
 router = APIRouter(tags=["stocks"])
@@ -98,6 +98,31 @@ def get_valuation(
             per=float(r.per) if r.per is not None else None,
             pbr=float(r.pbr) if r.pbr is not None else None,
             dividend_yield=float(r.dividend_yield) if r.dividend_yield is not None else None,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/stocks/{stock_id}/financials", response_model=list[FinancialOut])
+def get_financials(
+    stock_id: str,
+    limit: int = Query(12, description="最近幾季的財報（預設 12 季＝3 年）"),
+    db: Session = Depends(get_db),
+):
+    """回傳個股季度財報（目前為 EPS 每股盈餘），由新到舊。"""
+    rows = (
+        db.query(Financial)
+        .filter(Financial.stock_id == stock_id)
+        .order_by(Financial.date.desc())
+        .limit(limit)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="這檔股票還沒有財報資料，請先執行 seed.py 匯入")
+    return [
+        FinancialOut(
+            date=r.date.isoformat(),
+            eps=float(r.eps) if r.eps is not None else None,
         )
         for r in rows
     ]
