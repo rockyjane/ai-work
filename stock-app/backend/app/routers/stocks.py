@@ -5,8 +5,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Stock, DailyPrice, Valuation, Financial
-from ..schemas import ValuationOut, FinancialOut
+from ..models import Stock, DailyPrice, Valuation, Financial, Revenue
+from ..schemas import ValuationOut, FinancialOut, RevenueOut
 from ..indicators import compute_indicators
 
 router = APIRouter(tags=["stocks"])
@@ -126,6 +126,44 @@ def get_financials(
         )
         for r in rows
     ]
+
+
+@router.get("/stocks/{stock_id}/revenue", response_model=list[RevenueOut])
+def get_revenue(
+    stock_id: str,
+    limit: int = Query(12, description="最近幾個月的營收（預設 12 個月）"),
+    db: Session = Depends(get_db),
+):
+    """回傳個股每月營收，並即時計算 YoY（年增率）、MoM（月增率），由新到舊。"""
+    rows = (
+        db.query(Revenue)
+        .filter(Revenue.stock_id == stock_id)
+        .order_by(Revenue.year.asc(), Revenue.month.asc())
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="這檔股票還沒有營收資料，請先執行 seed.py 匯入")
+
+    # 建 (年,月) -> 營收 的查表，方便找「去年同月」「上個月」
+    rev_map = {(r.year, r.month): r.revenue for r in rows}
+
+    def pct(cur: int, base) -> float | None:
+        if not base:            # base 為 None 或 0 都不算，避免除以 0
+            return None
+        return round((cur - base) / base * 100, 2)
+
+    out = []
+    for r in rows:
+        yoy = pct(r.revenue, rev_map.get((r.year - 1, r.month)))          # 去年同月
+        prev_ym = (r.year, r.month - 1) if r.month > 1 else (r.year - 1, 12)  # 上個月（跨年處理）
+        mom = pct(r.revenue, rev_map.get(prev_ym))
+        out.append(RevenueOut(
+            year=r.year, month=r.month, revenue=int(r.revenue), yoy=yoy, mom=mom,
+        ))
+
+    # 由新到舊，取最近 limit 筆
+    out.reverse()
+    return out[:limit]
 
 
 @router.get("/rankings")
