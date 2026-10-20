@@ -18,6 +18,13 @@ export interface PriceData {
   indicators: Record<string, (number | null)[]>
 }
 
+export interface Valuation {
+  date: string
+  per: number | null
+  pbr: number | null
+  dividend_yield: number | null
+}
+
 export interface WatchItem {
   id: number
   stock_id: string
@@ -33,6 +40,9 @@ export const getStock = (id: string) =>
 
 export const getPrices = (id: string, indicators = 'ma,rsi,macd,kd', limit = 250) =>
   api.get<PriceData>(`/stocks/${id}/prices`, { params: { indicators, limit } }).then((r) => r.data)
+
+export const getValuation = (id: string, limit = 60) =>
+  api.get<Valuation[]>(`/stocks/${id}/valuation`, { params: { limit } }).then((r) => r.data)
 
 export const getRankings = (top = 10) =>
   api.get('/rankings', { params: { top } }).then((r) => r.data)

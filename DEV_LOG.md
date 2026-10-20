@@ -11,7 +11,7 @@
 
 ## stock-app — 台股分析網站（重返金融業面試 DEMO + 學後端）
 
-- **狀態**：後端 MVP 完成並驗證；**搜尋涵蓋全台股（3088 檔）、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）**；**已實跑於 Docker MySQL 8.4（`.env` 一行切換 SQLite⇄MySQL）**；前端 K 線/搜尋/自選股＋基本面卡片已呈現，EPS 待上前端。
+- **狀態**：後端 MVP 完成並驗證；**搜尋涵蓋全台股（3088 檔）、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）**；**已實跑於 Docker MySQL 8.4（`.env` 一行切換 SQLite⇄MySQL）**；前端 K 線/搜尋/自選股＋個股基本面卡片（PER/PBR/殖利率）已呈現並驗證，EPS 待上前端。
 - **技術**：FastAPI + SQLAlchemy + 純 pandas 手算指標 + FinMind｜Vue 3 + Vite + ECharts｜DB SQLite⇄MySQL 可切。
 - **關鍵決策**：技術指標純 pandas 手算（避開 FinMind 相依衝突）、資料層抽象（一份 ORM 兩種 DB）、行情先進 DB 再供前端。
 - **詳細紀錄** → [`stock-app/DEV_LOG.md`](stock-app/DEV_LOG.md)

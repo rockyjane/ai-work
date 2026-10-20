@@ -30,6 +30,9 @@
 ### 2026-10-17 [claude] [後端] 完成
 新增**財報評價基本面**第一塊：PER（本益比）/ PBR（股價淨值比）/ 殖利率。後端按既有四層對稱擴充——`models.Valuation` 表、`data_fetcher.fetch_per_pbr`+`upsert_valuation`、`schemas.ValuationOut`、API `GET /api/stocks/{id}/valuation`，`seed.py` 讓台灣50 順抓近一年評價資料。資料源 FinMind `taiwan_stock_per_pbr`（一個接口同時給三個指標）。
 
+### 2026-10-19 [claude] [前端] 完成
+評價指標**上前端**：個股頁（`StockDetailView.vue`）K 線上方新增「基本面」卡片，顯示最新 PER/PBR/殖利率，各欄位附 tooltip 白話說明（延續零基礎友善風格）。`api/index.ts` 加 `Valuation` 型別與 `getValuation()`。評價獨立抓取並容錯：抓不到只是不顯示卡片、不影響 K 線。台積電/鴻海個股頁實際瀏覽器驗證卡片正常顯示。
+
 ### 2026-10-20 [claude] [後端] 完成
 新增**季度財報 EPS（每股盈餘）**。因財報是「每季」頻率（非每日），獨立開 `models.Financial` 表（不塞進每日的 valuations）；`data_fetcher.fetch_financials`（篩 FinMind 長格式 `type==EPS`）+ `upsert_financials`、`schemas.FinancialOut`、API `GET /api/stocks/{id}/financials`（預設近 12 季），`seed.py` 台灣50 順抓近 3 年 EPS。資料源 FinMind `taiwan_stock_financial_statement`。
 
@@ -107,6 +110,12 @@
 - **schema＝後端版的「資料長相合約」**：`ValuationOut`（Pydantic）規定 API 回傳 JSON 的欄位，自動驗證＋自動產 `/docs` 文件——概念同前端 TS interface，但執行期會真的驗證。
 - **冪等 upsert**：靠 `(stock_id, date)` UniqueConstraint ＋ 先撈 existing 再跳過，重複跑不產生重複列。
 
+### 2026-10-19 [claude] [全端] 觀念
+**前後端有相依時，後端要先往上合到「共同主線」，前端分支才拿得到。**
+- **現象**：前端分支（自 `stock-app/main` 開）要顯示評價，但在這個工作樹打 API 卻 404、路由消失。
+- **原因**：valuation 後端當時只在 `stock-app/back-end/main`，還沒合進 `stock-app/main`；而「**一個資料夾同一時間只攤開一條分支**」——切到前端分支後，整個資料夾（含 backend）都是前端分支的版本，那裡的 `routers/stocks.py` 是沒有 valuation 的舊版，`--reload` 還因此熱載成舊版。
+- **解法／心法**：先把後端那塊 `back-end/main → stock-app/main`（里程碑往上合），前端分支再 `git merge stock-app/main`，工作樹就同時具備前後端新程式。**跨角色相依的功能，整合點要上移到兩者共同的主線。**
+
 ### 2026-10-20 [claude] [程式] 觀念
 **資料頻率決定「存去哪張表」＋ pandas 長格式篩選（加 EPS 時學到）。**
 - **每日 vs 每季分表**：PER/PBR/殖利率是每日資料（放 `valuations`），EPS 是每季資料（放 `financials`）。硬塞同一張表會有大量空值；依「資料更新頻率」分表，每張表乾淨、查詢也單純。這也影響 API 預設筆數（valuation `limit=60` 天、financial `limit=12` 季）。
@@ -161,5 +170,5 @@ API：GET /api/stocks/2330/financials?limit=4 → 正確回近 4 季 EPS
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
 - **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
-- **前端**：K 線/搜尋/自選股已點測正常；評價指標卡片已在前端呈現（於 front-end 線）；**EPS 尚未上前端**。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率~~（✅ 2026-10-17 後端、前端已呈現）→ ~~EPS 後端~~（✅ 2026-10-20）→ **下一步：EPS 上前端（可做趨勢小圖）、或補月營收** → 最後用 Spring Boot 重寫後端做對照。
+- **前端**：K 線/搜尋/自選股已點測正常；**個股頁基本面卡片（PER/PBR/殖利率）已呈現並驗證**；EPS 尚未上前端。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率（後端）~~（✅ 2026-10-17）→ ~~評價指標上前端~~（✅ 2026-10-19）→ ~~EPS 後端~~（✅ 2026-10-20）→ **下一步：EPS 上前端（可做趨勢小圖）、或補月營收** → 最後用 Spring Boot 重寫後端做對照。
