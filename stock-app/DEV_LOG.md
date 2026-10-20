@@ -36,9 +36,8 @@
 ### 2026-10-20 [claude] [後端] 完成
 新增**季度財報 EPS（每股盈餘）**。因財報是「每季」頻率（非每日），獨立開 `models.Financial` 表（不塞進每日的 valuations）；`data_fetcher.fetch_financials`（篩 FinMind 長格式 `type==EPS`）+ `upsert_financials`、`schemas.FinancialOut`、API `GET /api/stocks/{id}/financials`（預設近 12 季），`seed.py` 台灣50 順抓近 3 年 EPS。資料源 FinMind `taiwan_stock_financial_statement`。
 
----
-
-## 二、踩到的坑 & 解法（重點）
+### 2026-10-21 [claude] [前端] 完成
+**EPS 上前端**：個股頁「基本面」卡片在 PER/PBR/殖利率下方新增一排 **EPS 季度趨勢長條圖**（近 8 季），每根 hover 顯示年月+EPS，一眼看出獲利成長/衰退。`api/index.ts` 加 `Financial` 型別與 `getFinancials()`。小圖用純 CSS flex 繪製（不為小圖另開 ECharts）；長條高度用 `computed` 依最大 EPS 算相對比例。台積電個股頁瀏覽器驗證：8 季由舊到新遞增、hover 正常。
 
 ### 2026-06-10 21:40 [claude] [後端] 雷
 **Python 版本不對，numpy 裝不起來。**
@@ -121,6 +120,11 @@
 - **每日 vs 每季分表**：PER/PBR/殖利率是每日資料（放 `valuations`），EPS 是每季資料（放 `financials`）。硬塞同一張表會有大量空值；依「資料更新頻率」分表，每張表乾淨、查詢也單純。這也影響 API 預設筆數（valuation `limit=60` 天、financial `limit=12` 季）。
 - **寬格式 vs 長格式**：`per_pbr` 是寬格式（一列含 PER/PBR/殖利率多欄）；`financial_statement` 是長格式（每個財報項目一列，用 `type` 欄標示）。長格式要先篩：`df[df["type"]=="EPS"]` 這招叫**布林遮罩**——`df["type"]=="EPS"` 產生一串 True/False，`df[布林]` 只留 True 的列，等同 SQL 的 `WHERE type='EPS'`。
 
+### 2026-10-21 [claude] [前端] 觀念
+**Vue3 `computed` 計算屬性 ＋ 不為小圖殺雞用牛刀。**
+- **`computed`**：根據 `ref` 自動算出衍生資料（這裡把後端「由新到舊」的 EPS 反轉成「由舊到新」、並算每根長條相對高度%）。來源 `ref` 一變就自動重算、畫面自動更新，不必手動同步——等同 Vue2 的 computed，寫法改為 `computed(() => {...})`。
+- **選圖的務實判斷**：K 線那種複雜互動圖才用 ECharts；EPS 這種「幾根長條看趨勢」的小圖，用純 CSS flex（高度綁 `heightPct`）更輕量、好懂、不必再開一個圖表實例。技術選型看需求、不是越重越好。
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -170,5 +174,5 @@ API：GET /api/stocks/2330/financials?limit=4 → 正確回近 4 季 EPS
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
 - **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
-- **前端**：K 線/搜尋/自選股已點測正常；**個股頁基本面卡片（PER/PBR/殖利率）已呈現並驗證**；EPS 尚未上前端。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率（後端）~~（✅ 2026-10-17）→ ~~評價指標上前端~~（✅ 2026-10-19）→ ~~EPS 後端~~（✅ 2026-10-20）→ **下一步：EPS 上前端（可做趨勢小圖）、或補月營收** → 最後用 Spring Boot 重寫後端做對照。
+- **前端**：K 線/搜尋/自選股已點測正常；**個股頁基本面卡片（PER/PBR/殖利率）＋ EPS 季度趨勢長條圖已呈現並驗證**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率（後端）~~（✅ 2026-10-17）→ ~~評價指標上前端~~（✅ 2026-10-19）→ ~~EPS 後端~~（✅ 2026-10-20）→ ~~EPS 上前端~~（✅ 2026-10-21）→ **下一步：補月營收，或啟動 Spring Boot 重寫後端做對照** → 最後 Spring Boot 版對照完成。

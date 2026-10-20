@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStock, getPrices, getValuation, addWatchlist, type Stock, type PriceData, type Valuation } from '../api'
+import { getStock, getPrices, getValuation, getFinancials, addWatchlist, type Stock, type PriceData, type Valuation, type Financial } from '../api'
 import KLineChart from '../components/KLineChart.vue'
 
 const route = useRoute()
@@ -11,8 +11,21 @@ const router = useRouter()
 const stock = ref<Stock | null>(null)
 const data = ref<PriceData | null>(null)
 const valuation = ref<Valuation | null>(null)   // 最新一筆評價指標
+const financials = ref<Financial[]>([])          // EPS 近幾季（由新到舊）
 const loading = ref(false)
 const sub = ref<'rsi' | 'macd' | 'kd'>('kd')
+
+// EPS 趨勢小圖資料：轉成由舊到新、算出每根長條的相對高度(%)
+const epsBars = computed(() => {
+  const rows = [...financials.value].reverse()         // 後端由新到舊 → 反轉成由舊到新
+  const vals = rows.map((r) => r.eps ?? 0)
+  const max = Math.max(...vals, 0.01)                  // 避免除以 0
+  return rows.map((r) => ({
+    date: r.date.slice(0, 7),                          // 2026-06
+    eps: r.eps,
+    heightPct: Math.max(((r.eps ?? 0) / max) * 100, 2), // 最矮也給 2% 看得到
+  }))
+})
 
 // 評價指標白話（滑鼠移上去看）
 const valuationHint: Record<string, string> = {
@@ -44,6 +57,12 @@ async function load(id: string) {
     valuation.value = rows[0] ?? null
   } catch {
     valuation.value = null
+  }
+  // EPS 同樣獨立抓、獨立容錯
+  try {
+    financials.value = await getFinancials(id, 8)
+  } catch {
+    financials.value = []
   }
 }
 
@@ -112,6 +131,27 @@ watch(() => route.params.id, (id) => id && load(id as string))
           </div>
         </el-tooltip>
       </div>
+
+      <div class="eps-block" v-if="epsBars.length">
+        <div class="eps-title">
+          EPS 每股盈餘（近 {{ epsBars.length }} 季，單位：元）
+          <span class="val-sub">每股幫你賺多少錢，長條越高越賺；看趨勢是成長還是衰退</span>
+        </div>
+        <div class="eps-bars">
+          <el-tooltip
+            v-for="b in epsBars" :key="b.date"
+            :content="`${b.date}　EPS ${b.eps ?? '—'} 元`" placement="top"
+          >
+            <div class="eps-col">
+              <div class="eps-bar-wrap">
+                <div class="eps-bar" :style="{ height: b.heightPct + '%' }"></div>
+              </div>
+              <div class="eps-val">{{ b.eps ?? '—' }}</div>
+              <div class="eps-date">{{ b.date.slice(5) }}</div>
+            </div>
+          </el-tooltip>
+        </div>
+      </div>
     </el-card>
 
     <el-card class="chart-card" v-if="data">
@@ -145,6 +185,14 @@ watch(() => route.params.id, (id) => id && load(id as string))
 .val-item { flex: 1; min-width: 120px; background: #f7f8fa; border-radius: 8px; padding: 12px 14px; cursor: help; }
 .val-label { color: #606266; font-size: 13px; margin-bottom: 4px; }
 .val-num { font-size: 22px; font-weight: 700; color: #303133; }
+.eps-block { margin-top: 16px; border-top: 1px dashed #e4e7ed; padding-top: 12px; }
+.eps-title { font-weight: 600; font-size: 14px; margin-bottom: 10px; }
+.eps-bars { display: flex; align-items: flex-end; gap: 8px; }
+.eps-col { flex: 1; display: flex; flex-direction: column; align-items: center; cursor: help; }
+.eps-bar-wrap { height: 80px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.eps-bar { width: 60%; min-height: 2px; background: linear-gradient(to top, #e53935, #ff8a80); border-radius: 3px 3px 0 0; transition: height .3s; }
+.eps-val { font-size: 12px; font-weight: 600; color: #303133; margin-top: 4px; }
+.eps-date { font-size: 11px; color: #909399; }
 .help { margin-bottom: 12px; }
 .help-list { margin: 0; padding-left: 18px; line-height: 1.9; color: #555; }
 .up { color: #e53935; font-weight: 600; }
