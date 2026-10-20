@@ -25,6 +25,11 @@ export interface Valuation {
   dividend_yield: number | null
 }
 
+export interface Financial {
+  date: string
+  eps: number | null
+}
+
 export interface WatchItem {
   id: number
   stock_id: string
@@ -43,6 +48,9 @@ export const getPrices = (id: string, indicators = 'ma,rsi,macd,kd', limit = 250
 
 export const getValuation = (id: string, limit = 60) =>
   api.get<Valuation[]>(`/stocks/${id}/valuation`, { params: { limit } }).then((r) => r.data)
+
+export const getFinancials = (id: string, limit = 8) =>
+  api.get<Financial[]>(`/stocks/${id}/financials`, { params: { limit } }).then((r) => r.data)
 
 export const getRankings = (top = 10) =>
   api.get('/rankings', { params: { top } }).then((r) => r.data)
