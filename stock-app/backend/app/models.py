@@ -73,6 +73,25 @@ class Financial(Base):
     __table_args__ = (UniqueConstraint("stock_id", "date", name="uniq_financial_stock_date"),)
 
 
+class Revenue(Base):
+    """每月營收（每月一筆）。只存原始營收金額；YoY/MoM 成長率在 API 即時計算。
+
+    月營收是「每月」頻率（台股每月 10 號前公布上月），比季報 EPS 更即時，
+    故再獨立一張月表（與季表 financials、每日 valuations 分開）。
+    資料來源 FinMind taiwan_stock_month_revenue。
+    """
+    __tablename__ = "revenues"
+
+    id = Column(PK, primary_key=True, autoincrement=True)
+    stock_id = Column(String(10), index=True)
+    year = Column(Integer, index=True)       # 營收所屬年，如 2026
+    month = Column(Integer, index=True)      # 營收所屬月，1~12
+    revenue = Column(BigInteger)             # 當月營收（單位：元）
+
+    # 同一檔股票同一個年月只會有一筆
+    __table_args__ = (UniqueConstraint("stock_id", "year", "month", name="uniq_revenue_stock_ym"),)
+
+
 class Watchlist(Base):
     """自選股"""
     __tablename__ = "watchlist"

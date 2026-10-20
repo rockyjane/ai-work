@@ -18,8 +18,8 @@ from datetime import date, timedelta
 
 from app.database import Base, engine, SessionLocal
 from app.data_fetcher import (
-    fetch_daily, fetch_stock_info, fetch_per_pbr, fetch_financials,
-    upsert_prices, upsert_valuation, upsert_financials,
+    fetch_daily, fetch_stock_info, fetch_per_pbr, fetch_financials, fetch_revenue,
+    upsert_prices, upsert_valuation, upsert_financials, upsert_revenue,
 )
 from app.models import Stock
 
@@ -133,6 +133,23 @@ def seed_financials(db, start):
         print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
 
 
+def seed_revenues(db, start):
+    """抓 TW50 的每月營收，含節流與限流容錯。"""
+    ok = 0
+    for i, sid in enumerate(TW50, 1):
+        try:
+            df = fetch_revenue(sid, start_date=start)
+            n = upsert_revenue(db, sid, df)
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 新增 {n} 筆（共 {len(df)}）")
+            ok += 1
+        except Exception as e:
+            print(f"  [{i:>2}/{len(TW50)}] {sid} {TW50[sid]}: 抓取失敗（可能限流）- {e}")
+        time.sleep(FETCH_SLEEP)
+    print(f"月營收完成：{ok}/{len(TW50)} 檔成功")
+    if ok < len(TW50):
+        print("※ 有失敗檔，多半是 FinMind 匿名限流。設定 FINMIND_TOKEN 後重跑即可補齊。")
+
+
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -151,6 +168,10 @@ def main():
     fin_start = (date.today() - timedelta(days=365 * 3)).isoformat()
     print("\n=== 抓季度財報（EPS）===")
     seed_financials(db, fin_start)
+    # 月營收抓近 3 年：要有「去年同月」才算得出 YoY，多抓確保完整
+    rev_start = (date.today() - timedelta(days=365 * 3)).isoformat()
+    print("\n=== 抓每月營收 ===")
+    seed_revenues(db, rev_start)
 
     db.close()
     print("\n完成！執行 `uvicorn app.main:app --reload` 啟動 API。")

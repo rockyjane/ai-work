@@ -31,6 +31,17 @@ class FinancialOut(BaseModel):
         from_attributes = True
 
 
+class RevenueOut(BaseModel):
+    year: int
+    month: int
+    revenue: int                       # 當月營收（元）
+    yoy: Optional[float] = None        # 年增率(%)：跟去年同月比
+    mom: Optional[float] = None        # 月增率(%)：跟上個月比
+
+    class Config:
+        from_attributes = True
+
+
 class WatchlistCreate(BaseModel):
     stock_id: str
     note: Optional[str] = ""
