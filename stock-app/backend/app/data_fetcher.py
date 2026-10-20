@@ -10,7 +10,7 @@ import pandas as pd
 from FinMind.data import DataLoader
 from sqlalchemy.orm import Session
 
-from .models import Stock, DailyPrice, Valuation
+from .models import Stock, DailyPrice, Valuation, Financial
 
 
 def _loader() -> DataLoader:
@@ -49,6 +49,27 @@ def fetch_per_pbr(stock_id: str, start_date: str, end_date: str | None = None) -
     df = df.rename(columns={"PER": "per", "PBR": "pbr"})
     df["date"] = pd.to_datetime(df["date"]).dt.date
     return df[["date", "per", "pbr", "dividend_yield"]]
+
+
+def fetch_financials(stock_id: str, start_date: str, end_date: str | None = None) -> pd.DataFrame:
+    """抓單一股票的季度財報，目前只取 EPS，回傳整理好的 DataFrame（date, eps）。
+
+    FinMind taiwan_stock_financial_statement 是「長格式」：每個財報項目一列，
+    用 type 欄標示（EPS, Revenue, GrossProfit...），value 欄是數值。
+    這裡只篩出 type=='EPS' 的列，轉成一行一季的 (date, eps)。
+    """
+    api = _loader()
+    df = api.taiwan_stock_financial_statement(
+        stock_id=stock_id, start_date=start_date, end_date=end_date,
+    )
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["date", "eps"])
+    eps = df[df["type"] == "EPS"][["date", "value"]].copy()
+    if eps.empty:
+        return pd.DataFrame(columns=["date", "eps"])
+    eps = eps.rename(columns={"value": "eps"})
+    eps["date"] = pd.to_datetime(eps["date"]).dt.date
+    return eps[["date", "eps"]]
 
 
 def fetch_stock_info() -> pd.DataFrame:
@@ -97,6 +118,24 @@ def upsert_valuation(db: Session, stock_id: str, df: pd.DataFrame) -> int:
             date=r["date"],
             per=r["per"], pbr=r["pbr"], dividend_yield=r["dividend_yield"],
         ))
+    if rows:
+        db.bulk_save_objects(rows)
+        db.commit()
+    return len(rows)
+
+
+def upsert_financials(db: Session, stock_id: str, df: pd.DataFrame) -> int:
+    """把季度財報（EPS）寫進 DB，已存在的季度跳過。回傳新增筆數。"""
+    if df.empty:
+        return 0
+    existing = {
+        d[0] for d in db.query(Financial.date).filter(Financial.stock_id == stock_id).all()
+    }
+    rows = []
+    for _, r in df.iterrows():
+        if r["date"] in existing:
+            continue
+        rows.append(Financial(stock_id=stock_id, date=r["date"], eps=r["eps"]))
     if rows:
         db.bulk_save_objects(rows)
         db.commit()

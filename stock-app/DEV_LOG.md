@@ -30,6 +30,9 @@
 ### 2026-10-17 [claude] [後端] 完成
 新增**財報評價基本面**第一塊：PER（本益比）/ PBR（股價淨值比）/ 殖利率。後端按既有四層對稱擴充——`models.Valuation` 表、`data_fetcher.fetch_per_pbr`+`upsert_valuation`、`schemas.ValuationOut`、API `GET /api/stocks/{id}/valuation`，`seed.py` 讓台灣50 順抓近一年評價資料。資料源 FinMind `taiwan_stock_per_pbr`（一個接口同時給三個指標）。
 
+### 2026-10-20 [claude] [後端] 完成
+新增**季度財報 EPS（每股盈餘）**。因財報是「每季」頻率（非每日），獨立開 `models.Financial` 表（不塞進每日的 valuations）；`data_fetcher.fetch_financials`（篩 FinMind 長格式 `type==EPS`）+ `upsert_financials`、`schemas.FinancialOut`、API `GET /api/stocks/{id}/financials`（預設近 12 季），`seed.py` 台灣50 順抓近 3 年 EPS。資料源 FinMind `taiwan_stock_financial_statement`。
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -104,6 +107,11 @@
 - **schema＝後端版的「資料長相合約」**：`ValuationOut`（Pydantic）規定 API 回傳 JSON 的欄位，自動驗證＋自動產 `/docs` 文件——概念同前端 TS interface，但執行期會真的驗證。
 - **冪等 upsert**：靠 `(stock_id, date)` UniqueConstraint ＋ 先撈 existing 再跳過，重複跑不產生重複列。
 
+### 2026-10-20 [claude] [程式] 觀念
+**資料頻率決定「存去哪張表」＋ pandas 長格式篩選（加 EPS 時學到）。**
+- **每日 vs 每季分表**：PER/PBR/殖利率是每日資料（放 `valuations`），EPS 是每季資料（放 `financials`）。硬塞同一張表會有大量空值；依「資料更新頻率」分表，每張表乾淨、查詢也單純。這也影響 API 預設筆數（valuation `limit=60` 天、financial `limit=12` 季）。
+- **寬格式 vs 長格式**：`per_pbr` 是寬格式（一列含 PER/PBR/殖利率多欄）；`financial_statement` 是長格式（每個財報項目一列，用 `type` 欄標示）。長格式要先篩：`df[df["type"]=="EPS"]` 這招叫**布林遮罩**——`df["type"]=="EPS"` 產生一串 True/False，`df[布林]` 只留 True 的列，等同 SQL 的 `WHERE type='EPS'`。
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -139,10 +147,19 @@ API：GET /api/stocks/2330/valuation?limit=3 → 正確回近 3 日 PER/PBR/殖�
      查無資料的 9999 → 正確回 404「請先執行 seed.py 匯入」
 ```
 
+### 2026-10-20 [claude] [後端] 實測
+**EPS 財報 API 端到端驗證（資料源＝MySQL）：**
+```
+seed：台灣50 財報 50/50 檔成功，financials 共 550 筆（50 檔 × 11 季）
+2330 近 4 季 EPS：27.25 / 22.08 / 19.51 / 17.44（由新到舊，逐季成長）
+API：GET /api/stocks/2330/financials?limit=4 → 正確回近 4 季 EPS
+     查無資料的 9999 → 正確回 404
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
-- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
-- **前端**：程式碼齊全（K 線/搜尋/自選股已實際點測正常）；**評價指標 API 尚未在前端呈現**。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率~~（✅ 2026-10-17）→ **下一步：補 EPS/月營收，或先把評價指標顯示到前端** → 最後用 Spring Boot 重寫後端做對照。
+- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
+- **前端**：K 線/搜尋/自選股已點測正常；評價指標卡片已在前端呈現（於 front-end 線）；**EPS 尚未上前端**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ 加財報基本面：~~評價指標 PER/PBR/殖利率~~（✅ 2026-10-17 後端、前端已呈現）→ ~~EPS 後端~~（✅ 2026-10-20）→ **下一步：EPS 上前端（可做趨勢小圖）、或補月營收** → 最後用 Spring Boot 重寫後端做對照。
