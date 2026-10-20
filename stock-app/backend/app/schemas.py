@@ -23,6 +23,14 @@ class ValuationOut(BaseModel):
         from_attributes = True
 
 
+class FinancialOut(BaseModel):
+    date: str
+    eps: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
 class WatchlistCreate(BaseModel):
     stock_id: str
     note: Optional[str] = ""
