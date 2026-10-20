@@ -55,6 +55,24 @@ class Valuation(Base):
     __table_args__ = (UniqueConstraint("stock_id", "date", name="uniq_valuation_stock_date"),)
 
 
+class Financial(Base):
+    """季度財報（每季一筆）。先放 EPS，未來可擴充毛利率、營收等欄位。
+
+    和每日的 Valuation 分開：財報是「每季」資料（3/31、6/30、9/30、12/31），
+    頻率跟每日評價指標不同，硬塞同一張表會有大量空值，故獨立一張季表。
+    資料來源 FinMind taiwan_stock_financial_statement（type=EPS）。
+    """
+    __tablename__ = "financials"
+
+    id = Column(PK, primary_key=True, autoincrement=True)
+    stock_id = Column(String(10), index=True)
+    date = Column(Date, index=True)          # 季底日期，如 2026-06-30
+    eps = Column(Numeric(10, 2))             # 每股盈餘：公司每股幫你賺多少錢
+
+    # 同一檔股票同一季只會有一筆
+    __table_args__ = (UniqueConstraint("stock_id", "date", name="uniq_financial_stock_date"),)
+
+
 class Watchlist(Base):
     """自選股"""
     __tablename__ = "watchlist"
