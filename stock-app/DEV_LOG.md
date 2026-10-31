@@ -52,6 +52,9 @@
 ### 2026-10-31 [claude] [後端] 完成
 rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改為只遍歷有日線的約 50 檔，4.5s→0.1s。
 
+### 2026-10-31 [claude] [Java後端] 完成
+**啟動 Spring Boot 版後端（新角色 `backend-java/`，對照 Python FastAPI 版）**：Spring Boot 3.4.1 + JDK 21 + Maven Wrapper；三層架構 Entity(`Stock`)/Repository(`StockRepository`)/Controller(`StockController`) 寫出第一支 `GET /api/stocks?q=`。連**同一個 MySQL `stock_db`**（讀 Python 版灌好的資料，不重 seed），跑在 **8081** 埠。實測與 Python 版（8000）回傳**完全相同的 JSON**（含中文搜尋）。環境搭建雷另記於 `CLAUDE_CODE_SETUP_GUIDE.md`。
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -176,6 +179,13 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 - **`ref<Set>` 要重新賦值**：Vue3 `ref<Set>` 直接 `.add()` 不會觸發畫面更新，要 `new Set(舊).add(x)` 重新賦值（星星「已加入」狀態就是靠這更新）。
 - **N+1 查詢**：後端 rankings 的教訓——「迴圈裡逐筆查 DB」在資料量大時會很慢，先縮小迴圈範圍（只查有資料的）或改一次查詢。
 
+### 2026-10-31 [claude] [Java後端] 觀念
+**Spring Boot 三層架構，對照 Python FastAPI（學 Java 的切入點）。**
+- **Entity（`@Entity`）≈ SQLAlchemy model**：一個 class 對一張表，欄位用註解映射；`stockId`（Java 駝峰）靠 `spring.jackson.property-naming-strategy=SNAKE_CASE` 輸出成 `stock_id`，和 Python 版 JSON 一致 → **同契約、兩實作**，同一前端通用。
+- **Repository（`extends JpaRepository`）≈ db.query**：只寫 interface、不寫實作，Spring Data **自動生出** findAll/save… 比 SQLAlchemy 還自動；自訂搜尋用 `@Query`（類 SQL 的 JPQL）。
+- **Controller（`@RestController`/`@GetMapping`）≈ FastAPI router**：註解即路由；建構子注入 Repository ≈ FastAPI 的 `Depends`。
+- **核心差異感受**：Java/Spring 大量用**註解驅動**＋**依賴注入**，比 Python 更「約定大於配置」；型別嚴格、要寫 getter。但三層職責和 Python 版一一對應，觀念可直接遷移。
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -233,10 +243,19 @@ seed：台灣50 月營收 50/50 成功，revenues 共 1800 筆（50 檔 × 36 �
 ### 2026-10-31 [claude] [後端] 實測
 rankings 優化前後（同機連測 3 次）：**4.99s / 4.60s / 4.44s → 0.12s / 0.10s / 0.09s**；回傳內容一致（緯創 +5%…）。
 
+### 2026-10-31 [claude] [Java後端] 實測
+**Spring Boot 版第一支 API 與 Python 版並排對照（讀同一個 MySQL）：**
+```
+Java   (8081) GET /api/stocks?q=2330 → [{"stock_id":"2330","name":"台積電","industry":"電子工業","market":"上市"}]
+Python (8000) GET /api/stocks?q=2330 → [{"stock_id":"2330","name":"台積電","industry":"電子工業","market":"上市"}]
+兩者回傳「完全相同」；中文搜尋「台積」、空搜尋前 50 筆也正常。
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
-- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；rankings 已優化（4.5s→0.1s）；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
+- **後端（Python）**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；rankings 已優化（4.5s→0.1s）；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
 - **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖＋**月營收 YoY 圖**皆已呈現；**全站手機 RWD＋總覽分頁/星星已加入狀態/排行榜開合**均已完成並實測。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收（後端+前端）~~（✅ 2026-10-22～31）→ ~~手機 RWD＋UX 優化＋rankings 效能~~（✅ 2026-10-31）→ **下一步：啟動 Spring Boot 重寫後端做對照**。
+- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1 骨架 + 第一支 `GET /api/stocks` 已跑通（8081，讀同一 MySQL、JSON 與 Python 版一致）。**下一步：逐支翻譯 prices/valuation/financials/revenue/rankings/watchlist**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收（後端+前端）~~（✅ 2026-10-22～31）→ ~~手機 RWD＋UX 優化＋rankings 效能~~（✅ 2026-10-31）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：Spring Boot 逐支翻譯其餘 API**。
