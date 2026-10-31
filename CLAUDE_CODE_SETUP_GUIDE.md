@@ -482,6 +482,47 @@ gh pr diff <PR#>                          # 看 diff
 
 ---
 
+## 15. Spring Boot / Java 後端搭建踩雷
+
+> 情境：在既有 Python FastAPI 後端旁，另立一個 Spring Boot 後端做對照（同一個 MySQL、同一組 API 契約）。以下是搭起來踩過的雷。
+
+### 15.1 JDK：macOS 可能早就有好幾個，先查再說
+- 不用急著裝。先查：`/usr/libexec/java_home -V` 會列出所有已裝的 JDK（跑過 Android Studio／JetBrains IDE 的機器常有一堆）。
+- Spring Boot 3.x 需要 **JDK 17+**；有 17 或 21 都行。`java -version` 看預設是哪個。
+- 本機實測：一台 2015 Intel Mac 竟有 6 個 JVM（21、多個 17、8），直接用預設的 21 即可。
+
+### 15.2 ⚠️ Spring Initializr 現在只給 Boot 4.x——學習／面試要手動降 3.x
+- **現象**：`start.spring.io` 產生專案，預設版本是 **Boot 4.x**（2025 底 4.0 GA 後，Initializr 已不提供 3.x；指定 `bootVersion=3.x` 會回 **HTTP 400**）。
+- **為什麼要降**：金融業 production 幾乎都還 3.x／2.7；**教學資源 99% 是 3.x**；Boot 4 連相依名都改了（`spring-boot-starter-webmvc`），和市面教學對不上，新手會處處卡。
+- **解法**：用 Initializr 拿骨架（`mvnw`、目錄結構都與版本無關），再**手動改 `pom.xml`** 的 `<parent>` 版本到 **3.4.1**（Maven Central 上有，Initializr 不給≠抓不到），並把相依名改回傳統：
+  - `spring-boot-starter-webmvc` → **`spring-boot-starter-web`**
+  - `...-data-jpa-test`／`...-webmvc-test` → **`spring-boot-starter-test`**（3.x 的測試 starter）
+
+### 15.3 Maven Wrapper（`./mvnw`）：連 Maven 都不用裝
+- Initializr 生成的專案自帶 **`./mvnw`**（Maven Wrapper）：第一次執行會自動下載對應版本的 Maven，**不必 `brew install maven`**。
+- `./mvnw compile`（編譯）、`./mvnw spring-boot:run`（啟動）——像 Python 的 venv，版本跟專案綁定、乾淨。
+- **wrapper 的 jar 不進 git**（Initializr 的 `.gitignore` 擋了 `.mvn/wrapper/maven-wrapper.jar`）：版本記在 `maven-wrapper.properties`，`mvnw` 會自動重抓。這是標準做法，別硬加進版控。
+
+### 15.4 ⚠️ 8080 埠被 phpMyAdmin 佔住
+- **現象**：`./mvnw spring-boot:run` 啟動失敗 `Web server failed to start. Port 8080 was already in use`。
+- **原因**：Spring Boot 預設 8080，但本機 docker-compose 的 **phpMyAdmin 正是 8080**（見 §11 的 DB 容器）。
+- **解法**：`application.properties` 加 `server.port=8081`。（這樣 Python 版 8000、Java 版 8081、phpMyAdmin 8080 三者並存不打架。）
+
+### 15.5 連同一個 MySQL：設定與安全
+- `application.properties` 重點（連 Python 版已灌好的 `stock_db`、不重 seed）：
+  ```properties
+  spring.datasource.url=jdbc:mysql://127.0.0.1:3306/stock_db
+  spring.datasource.username=stock_user
+  spring.datasource.password=${DB_PASSWORD}        # 密碼走環境變數，不寫死進 git（同 Python 版 .env 精神）
+  spring.jpa.hibernate.ddl-auto=none               # 表由 Python 建好，Java 只讀、不要自動改結構
+  spring.jackson.property-naming-strategy=SNAKE_CASE  # JSON 輸出 stockId→stock_id，和 Python 版一致
+  ```
+- **啟動帶密碼**：`DB_PASSWORD=你的密碼 ./mvnw spring-boot:run`。
+- **根路徑 404 是正常的**：Java 版只有後端 API、沒有前台頁面。驗證要打有 API 的網址（`http://127.0.0.1:8081/api/stocks?q=2330`），不是 `http://127.0.0.1:8081/`。
+- **snake_case 對齊**＝「同契約、兩實作」：同一個 Vue 前端只要把 Vite proxy 指到 8081，就能改用 Java 後端（但要等 Java 把對應 API 都翻譯完，否則其他頁面會 404）。
+
+---
+
 ## 附錄：常見錯誤訊息對照
 
 | 訊息 | 多半代表 | 解法 |
@@ -500,3 +541,6 @@ gh pr diff <PR#>                          # 看 diff
 | `NOT NULL constraint failed: xxx.id`（SQLite） | BigInteger 主鍵在 SQLite 不自增 | 第 11.6 點：用 `with_variant(Integer, "sqlite")` |
 | pip 裝完仍 `ModuleNotFoundError` / 版本被亂降 | 套件相依衝突、或套件漏宣告相依 | 第 11.3 點：鎖版本、找甜蜜點、必要時拔掉衝突套件 |
 | 編譯 numpy/pandas 失敗 | Python 版本太新（如 3.13）沒有 wheel | 第 11.1 點：改用 `python3.11 -m venv` |
+| Initializr `bootVersion=3.x` 回 HTTP 400 | Initializr 已不提供 3.x（只給 4.x） | 第 15.2 點：拿骨架後手動改 pom parent 到 3.4.1 |
+| `Port 8080 was already in use`（Spring Boot） | 8080 被 phpMyAdmin 佔用 | 第 15.4 點：`application.properties` 加 `server.port=8081` |
+| Spring Boot 連 MySQL 失敗 / 根路徑 404 | 密碼未帶／根路徑本就無頁面 | 第 15.5 點：`DB_PASSWORD=xxx ./mvnw spring-boot:run`；打 `/api/...` 不是 `/` |
