@@ -186,6 +186,14 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 - **Controller（`@RestController`/`@GetMapping`）≈ FastAPI router**：註解即路由；建構子注入 Repository ≈ FastAPI 的 `Depends`。
 - **核心差異感受**：Java/Spring 大量用**註解驅動**＋**依賴注入**，比 Python 更「約定大於配置」；型別嚴格、要寫 getter。但三層職責和 Python 版一一對應，觀念可直接遷移。
 
+### 2026-10-31 [claude] [全端] 觀念
+**「同契約、兩實作」——前端一行切換後端（面試亮點）。**
+- **意義**：Python(FastAPI) 與 Java(Spring Boot) 兩個後端**實作同一組 API 契約**（相同路徑、相同 JSON 格式），前端**完全不用改程式碼**，只改 `vite.config.ts` 的 proxy 目標埠（`8000`=Python／`8081`=Java）就能切換資料來源。這展現「**面向介面而非實作**」：前端只依賴「契約」、不依賴後端語言。
+- **怎麼做到 JSON 一致**：Java 欄位是駝峰 `stockId`，靠 `spring.jackson.property-naming-strategy=SNAKE_CASE` 自動輸出成 `stock_id`，對齊 Python 版。
+- **現況（誠實記錄）**：Java 目前只翻譯了 1/10 支 API（搜尋），切過去只有搜尋能用；要逐支翻完才能完整對照。
+- **面試怎麼講**：「我用兩種後端語言實作同一個系統、共用同一個 MySQL 與同一個前端，證明 API 契約設計良好、前後端解耦」——同時展示 Python 與 Java 兩種技能。
+- **操作細節**（怎麼開/怎麼切）另記於 `CLAUDE_CODE_SETUP_GUIDE.md` §15.6，此處只記設計觀念。
+
 ---
 
 ## 五、實測結果（證明真的會動）
