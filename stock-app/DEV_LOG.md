@@ -42,6 +42,9 @@
 ### 2026-10-22 [claude] [後端] 完成
 新增**每月營收**（第三種頻率：每月，繼每日評價、每季 EPS 之後）。獨立開 `models.Revenue` 表（`(stock_id,year,month)` 唯一，只存原始營收金額）；`data_fetcher.fetch_revenue`+`upsert_revenue`、`schemas.RevenueOut`、API `GET /api/stocks/{id}/revenue`。**YoY（年增率）/ MoM（月增率）不存 DB、在 API 即時計算**。`seed.py` 台灣50 順抓近 3 年。資料源 FinMind `taiwan_stock_month_revenue`。
 
+### 2026-10-31 [claude] [Java後端] 完成
+**啟動 Spring Boot 版後端（新角色 `backend-java/`，對照 Python FastAPI 版）**：Spring Boot 3.4.1 + JDK 21 + Maven Wrapper；三層架構 Entity(`Stock`)/Repository(`StockRepository`)/Controller(`StockController`) 寫出第一支 `GET /api/stocks?q=`。連**同一個 MySQL `stock_db`**（讀 Python 版灌好的資料，不重 seed），跑在 **8081** 埠。實測與 Python 版（8000）回傳**完全相同的 JSON**（含中文搜尋）。環境搭建雷另記於 `CLAUDE_CODE_SETUP_GUIDE.md`。
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -139,9 +142,12 @@
 - **查表加速**：算 YoY/MoM 要反覆找「去年同月/上個月」，先把全部撈成 `{(年,月):營收}` dict，查詢 O(1)——用空間換時間。
 - **跨年邊界雷**：1 月的「上個月」是**去年 12 月**不是「0 月」；`month==1` 要特判成 `(year-1, 12)`，否則 1 月的 MoM 永遠算錯。除法前也要擋 base 為 0/None（最早幾個月沒有 YoY 屬正常，回 null）。
 
----
-
-## 五、實測結果（證明真的會動）
+### 2026-10-31 [claude] [Java後端] 觀念
+**Spring Boot 三層架構，對照 Python FastAPI（學 Java 的切入點）。**
+- **Entity（`@Entity`）≈ SQLAlchemy model**：一個 class 對一張表，欄位用註解映射；`stockId`（Java 駝峰）靠 `spring.jackson.property-naming-strategy=SNAKE_CASE` 輸出成 `stock_id`，和 Python 版 JSON 一致 → **同契約、兩實作**，同一前端通用。
+- **Repository（`extends JpaRepository`）≈ db.query**：只寫 interface、不寫實作，Spring Data **自動生出** findAll/save… 比 SQLAlchemy 還自動；自訂搜尋用 `@Query`（類 SQL 的 JPQL）。
+- **Controller（`@RestController`/`@GetMapping`）≈ FastAPI router**：註解即路由；建構子注入 Repository ≈ FastAPI 的 `Depends`。
+- **核心差異感受**：Java/Spring 大量用**註解驅動**＋**依賴注入**，比 Python 更「約定大於配置」；型別嚴格、要寫 getter。但三層職責和 Python 版一一對應，觀念可直接遷移。
 
 ### 2026-06-10 22:10 [claude] [後端] 實測
 ```
@@ -193,10 +199,19 @@ seed：台灣50 月營收 50/50 成功，revenues 共 1800 筆（50 檔 × 36 �
 查無資料的 9999 → 正確 404
 ```
 
+### 2026-10-31 [claude] [Java後端] 實測
+**Spring Boot 版第一支 API 與 Python 版並排對照（讀同一個 MySQL）：**
+```
+Java   (8081) GET /api/stocks?q=2330 → [{"stock_id":"2330","name":"台積電","industry":"電子工業","market":"上市"}]
+Python (8000) GET /api/stocks?q=2330 → [{"stock_id":"2330","name":"台積電","industry":"電子工業","market":"上市"}]
+兩者回傳「完全相同」；中文搜尋「台積」、空搜尋前 50 筆也正常。
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
 - **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
 - **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖已呈現；**月營收尚未上前端**。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收後端~~（✅ 2026-10-22）→ **下一步：月營收上前端、或啟動 Spring Boot 重寫後端做對照**。
+- **Java 後端（`backend-java/`）**：Spring Boot 3.4.1 骨架 + 第一支 `GET /api/stocks` 已跑通（8081，讀同一 MySQL、JSON 與 Python 版一致）。**下一步：逐支翻譯 prices/valuation/financials/revenue/rankings/watchlist**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收後端~~（✅ 2026-10-22）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：月營收上前端（前端線）、Spring Boot 逐支翻譯其餘 API**。
