@@ -169,11 +169,17 @@ def get_revenue(
 @router.get("/rankings")
 def rankings(top: int = 10, db: Session = Depends(get_db)):
     """以最近兩個交易日計算漲跌幅，回傳上漲/下跌排行。"""
+    # 只遍歷「有日線資料」的股票（約 50 檔），不要掃全台 3088 檔做無謂查詢
+    # （原本 for 全部 Stock 再逐檔查 DB 是 N+1，實測 ~4.5s；改這樣後只剩數十次查詢）
+    stock_ids = [r[0] for r in db.query(DailyPrice.stock_id).distinct().all()]
+    name_map = dict(
+        db.query(Stock.stock_id, Stock.name).filter(Stock.stock_id.in_(stock_ids)).all()
+    )
     results = []
-    for s in db.query(Stock).all():
+    for sid in stock_ids:
         last2 = (
             db.query(DailyPrice)
-            .filter(DailyPrice.stock_id == s.stock_id)
+            .filter(DailyPrice.stock_id == sid)
             .order_by(DailyPrice.date.desc())
             .limit(2)
             .all()
@@ -187,7 +193,7 @@ def rankings(top: int = 10, db: Session = Depends(get_db)):
         change = float(cur.close) - prev_close
         pct = round(change / prev_close * 100, 2)
         results.append({
-            "stock_id": s.stock_id, "name": s.name,
+            "stock_id": sid, "name": name_map.get(sid, ""),
             "close": float(cur.close), "change": round(change, 2), "pct": pct,
         })
     results.sort(key=lambda x: x["pct"], reverse=True)
