@@ -521,6 +521,38 @@ gh pr diff <PR#>                          # 看 diff
 - **根路徑 404 是正常的**：Java 版只有後端 API、沒有前台頁面。驗證要打有 API 的網址（`http://127.0.0.1:8081/api/stocks?q=2330`），不是 `http://127.0.0.1:8081/`。
 - **snake_case 對齊**＝「同契約、兩實作」：同一個 Vue 前端只要把 Vite proxy 指到 8081，就能改用 Java 後端（但要等 Java 把對應 API 都翻譯完，否則其他頁面會 404）。
 
+### 15.6 兩版後端「怎麼開」與「怎麼切」對照
+
+**① 怎麼開（兩版啟動指令對照）**
+
+| | Python 版（FastAPI） | Java 版（Spring Boot） |
+| :--- | :--- | :--- |
+| 進資料夾 | `cd stock-app/backend` | `cd stock-app/backend-java` |
+| 前置 | `source .venv/bin/activate`（啟用 venv） | 不用（Maven Wrapper 自己管） |
+| 啟動 | `uvicorn app.main:app --reload` | `DB_PASSWORD=stock_pass ./mvnw spring-boot:run` |
+| 埠 | **8000** | **8081** |
+| 熱重載 | `--reload` 改碼自動重啟 | ⚠️ 無（改碼要手動重啟；要熱重載得加 `spring-boot-devtools`） |
+| 驗證 | `http://127.0.0.1:8000/api/stocks?q=2330` | `http://127.0.0.1:8081/api/stocks?q=2330`（根路徑 `/` 會 404，正常） |
+
+> 兩版都「一個指令啟動開發伺服器」，可**同時開**（8000 / 8081 不衝突）做並排對照。
+
+**② 怎麼切（前端一行改 proxy 就換後端）**
+
+前端完全不改程式碼，只改 `frontend/vite.config.ts` 這一行的目標埠：
+```ts
+proxy: { '/api': 'http://127.0.0.1:8000' },   // 8000=Python；改成 8081=Java
+```
+這正是「**同契約、兩實作**」——前端只認 API 契約、不認後端語言（靠 snake_case 對齊讓 JSON 一致）。
+
+**③ ⚠️ 現在還不能完整切（Java API 覆蓋進度）**
+
+| API | Python | Java |
+| :--- | :---: | :---: |
+| `GET /stocks`（搜尋） | ✅ | ✅ |
+| `/stocks/{id}`、`/prices`、`/valuation`、`/financials`、`/revenue`、`/rankings`、`/watchlist`… | ✅（共 10 支） | ❌ 待翻譯 |
+
+→ 現在把 proxy 切到 8081 只有「搜尋」能用，點進個股頁等會 404。**等 Java 逐支翻譯完**，才能一行切換、無縫對照。
+
 ---
 
 ## 附錄：常見錯誤訊息對照
