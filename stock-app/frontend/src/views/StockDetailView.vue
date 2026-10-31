@@ -2,7 +2,7 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStock, getPrices, getValuation, getFinancials, addWatchlist, type Stock, type PriceData, type Valuation, type Financial } from '../api'
+import { getStock, getPrices, getValuation, getFinancials, getRevenue, addWatchlist, type Stock, type PriceData, type Valuation, type Financial, type Revenue } from '../api'
 import KLineChart from '../components/KLineChart.vue'
 
 const route = useRoute()
@@ -12,6 +12,7 @@ const stock = ref<Stock | null>(null)
 const data = ref<PriceData | null>(null)
 const valuation = ref<Valuation | null>(null)   // 最新一筆評價指標
 const financials = ref<Financial[]>([])          // EPS 近幾季（由新到舊）
+const revenues = ref<Revenue[]>([])              // 月營收近幾個月（由新到舊）
 const loading = ref(false)
 const sub = ref<'rsi' | 'macd' | 'kd'>('kd')
 
@@ -24,6 +25,19 @@ const epsBars = computed(() => {
     date: r.date.slice(0, 7),                          // 2026-06
     eps: r.eps,
     heightPct: Math.max(((r.eps ?? 0) / max) * 100, 2), // 最矮也給 2% 看得到
+  }))
+})
+
+// 月營收 YoY 長條圖：由舊到新；高度用「絕對值 ÷ 最大絕對值」，正紅負綠
+const revBars = computed(() => {
+  const rows = [...revenues.value].reverse()           // 後端由新到舊 → 由舊到新
+  const maxAbs = Math.max(...rows.map((r) => Math.abs(r.yoy ?? 0)), 0.01)
+  return rows.map((r) => ({
+    label: `${r.year}/${String(r.month).padStart(2, '0')}`,
+    yoy: r.yoy,
+    revenue: r.revenue,
+    heightPct: Math.max((Math.abs(r.yoy ?? 0) / maxAbs) * 100, 2),
+    up: (r.yoy ?? 0) >= 0,                              // 正成長=紅、衰退=綠（台股配色）
   }))
 })
 
@@ -63,6 +77,12 @@ async function load(id: string) {
     financials.value = await getFinancials(id, 8)
   } catch {
     financials.value = []
+  }
+  // 月營收同樣獨立抓、獨立容錯
+  try {
+    revenues.value = await getRevenue(id, 12)
+  } catch {
+    revenues.value = []
   }
 }
 
@@ -152,6 +172,27 @@ watch(() => route.params.id, (id) => id && load(id as string))
           </el-tooltip>
         </div>
       </div>
+
+      <div class="eps-block" v-if="revBars.length">
+        <div class="eps-title">
+          月營收年增率 YoY（近 {{ revBars.length }} 月）
+          <span class="val-sub">跟「去年同月」比成長幾 %，排除淡旺季看真實成長；<span class="up">紅</span>=成長、<span class="down">綠</span>=衰退</span>
+        </div>
+        <div class="eps-bars">
+          <el-tooltip
+            v-for="b in revBars" :key="b.label"
+            :content="`${b.label}　YoY ${b.yoy ?? '—'}%　營收 ${(b.revenue / 1e8).toFixed(0)} 億`" placement="top"
+          >
+            <div class="eps-col">
+              <div class="eps-bar-wrap">
+                <div class="eps-bar" :class="b.up ? 'bar-up' : 'bar-down'" :style="{ height: b.heightPct + '%' }"></div>
+              </div>
+              <div class="eps-val" :class="b.up ? 'up' : 'down'">{{ b.yoy != null ? b.yoy + '%' : '—' }}</div>
+              <div class="eps-date">{{ b.label.slice(5) }}</div>
+            </div>
+          </el-tooltip>
+        </div>
+      </div>
     </el-card>
 
     <el-card class="chart-card" v-if="data">
@@ -172,7 +213,14 @@ watch(() => route.params.id, (id) => id && load(id as string))
 <style scoped>
 .page { max-width: 1200px; margin: 0 auto; }
 .ph { margin-bottom: 16px; }
-.title { font-size: 18px; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; }
+.title { font-size: 18px; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* 手機版：縮小標題與基本面數字，避免 header 與卡片過擠 */
+@media (max-width: 600px) {
+  .title { font-size: 15px; gap: 4px; }
+  .val-grid { gap: 8px; }
+  .val-item { min-width: 90px; padding: 10px; }
+  .val-num { font-size: 18px; }
+}
 .chart-card { margin-top: 8px; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
 .label { font-weight: 600; }
@@ -187,12 +235,15 @@ watch(() => route.params.id, (id) => id && load(id as string))
 .val-num { font-size: 22px; font-weight: 700; color: #303133; }
 .eps-block { margin-top: 16px; border-top: 1px dashed #e4e7ed; padding-top: 12px; }
 .eps-title { font-weight: 600; font-size: 14px; margin-bottom: 10px; }
-.eps-bars { display: flex; align-items: flex-end; gap: 8px; }
-.eps-col { flex: 1; display: flex; flex-direction: column; align-items: center; cursor: help; }
+/* 長條列：寬螢幕平分撐滿；窄螢幕放不下就「在卡片內橫向捲動」，不撐爆整頁 */
+.eps-bars { display: flex; align-items: flex-end; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.eps-col { flex: 1 0 38px; min-width: 38px; display: flex; flex-direction: column; align-items: center; cursor: help; }
 .eps-bar-wrap { height: 80px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
 .eps-bar { width: 60%; min-height: 2px; background: linear-gradient(to top, #e53935, #ff8a80); border-radius: 3px 3px 0 0; transition: height .3s; }
-.eps-val { font-size: 12px; font-weight: 600; color: #303133; margin-top: 4px; }
-.eps-date { font-size: 11px; color: #909399; }
+.eps-bar.bar-up { background: linear-gradient(to top, #e53935, #ff8a80); }
+.eps-bar.bar-down { background: linear-gradient(to top, #43a047, #a5d6a7); }
+.eps-val { font-size: 12px; font-weight: 600; color: #303133; margin-top: 4px; white-space: nowrap; }
+.eps-date { font-size: 11px; color: #909399; white-space: nowrap; }
 .help { margin-bottom: 12px; }
 .help-list { margin: 0; padding-left: 18px; line-height: 1.9; color: #555; }
 .up { color: #e53935; font-weight: 600; }
