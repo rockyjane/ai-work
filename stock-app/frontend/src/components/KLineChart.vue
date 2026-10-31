@@ -39,7 +39,8 @@ function buildOption(): echarts.EChartsOption {
   return {
     animation: false,
     legend: { top: 0, data: ['K線', 'MA5', 'MA20', 'MA60'] },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    // confine：把十字游標的詳細浮框限制在圖表容器內，手機上不會向左溢出被裁切
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, confine: true },
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     grid: [
       { left: 50, right: 20, top: 40, height: '48%' },
@@ -53,7 +54,14 @@ function buildOption(): echarts.EChartsOption {
     ],
     yAxis: [
       { scale: true, splitArea: { show: true } },
-      { gridIndex: 1, name: '量', splitLine: { show: false } },
+      {
+        gridIndex: 1, name: '量', splitLine: { show: false }, splitNumber: 2,
+        // 成交量數字很大（上億），縮成「億/萬」避免被 Y 軸寬度裁切；標籤只留 2 段不擁擠
+        axisLabel: {
+          formatter: (v: number) =>
+            v >= 1e8 ? (v / 1e8).toFixed(1) + '億' : v >= 1e4 ? Math.round(v / 1e4) + '萬' : String(v),
+        },
+      },
       { gridIndex: 2, name: props.sub.toUpperCase(), scale: true },
     ],
     dataZoom: [

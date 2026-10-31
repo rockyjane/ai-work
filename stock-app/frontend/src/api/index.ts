@@ -30,6 +30,14 @@ export interface Financial {
   eps: number | null
 }
 
+export interface Revenue {
+  year: number
+  month: number
+  revenue: number
+  yoy: number | null
+  mom: number | null
+}
+
 export interface WatchItem {
   id: number
   stock_id: string
@@ -51,6 +59,9 @@ export const getValuation = (id: string, limit = 60) =>
 
 export const getFinancials = (id: string, limit = 8) =>
   api.get<Financial[]>(`/stocks/${id}/financials`, { params: { limit } }).then((r) => r.data)
+
+export const getRevenue = (id: string, limit = 12) =>
+  api.get<Revenue[]>(`/stocks/${id}/revenue`, { params: { limit } }).then((r) => r.data)
 
 export const getRankings = (top = 10) =>
   api.get('/rankings', { params: { top } }).then((r) => r.data)
