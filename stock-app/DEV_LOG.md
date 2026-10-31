@@ -9,6 +9,10 @@
 >   - **[屬於誰]** = 這則屬於哪一塊：`[前端]` ／ `[後端]` ／ `[全端]` ／ `[金融]`（可組合，如 `[前、後端]`）。方便日後一眼看出每個雷/決策/觀念當時屬於誰。
 >   - **分類**：完成／雷／決策／觀念／實測。
 > - 「坑&解法」每筆**至少**要有 **現象→原因→解法**，鼓勵再補好處、可用組合等。「觀念/知識」涵蓋**程式與金融**兩類，金融的先用白話解釋。
+> - **⚠️ 減少合併衝突的寫法約定**（前後端兩條線都會改這份，實測常在 DEV_LOG 撞衝突）：
+>   1. **各寫各的「新增」條目**：一到六大點都用「追加新 `###` 區塊」的方式記，**不要去改別人既有的行**——新增不會衝突、改同一行才會。
+>   2. **「六、現況」前後端分行寫**：後端狀態、前端狀態**各自獨立一行**（`- **後端**：…` / `- **前端**：…`），各自只改自己那行，避免兩邊搶同一行。
+>   3. **降低整合頻率**：功能分支完成合回「角色主線」即可；**角色主線 → `stock-app/main` 只在里程碑做一次**（累積數個功能再上），不要每個小功能都往上合（往上合越頻繁、DEV_LOG 越常撞）。
 
 ---
 
@@ -41,6 +45,12 @@
 
 ### 2026-10-22 [claude] [後端] 完成
 新增**每月營收**（第三種頻率：每月，繼每日評價、每季 EPS 之後）。獨立開 `models.Revenue` 表（`(stock_id,year,month)` 唯一，只存原始營收金額）；`data_fetcher.fetch_revenue`+`upsert_revenue`、`schemas.RevenueOut`、API `GET /api/stocks/{id}/revenue`。**YoY（年增率）/ MoM（月增率）不存 DB、在 API 即時計算**。`seed.py` 台灣50 順抓近 3 年。資料源 FinMind `taiwan_stock_month_revenue`。
+
+### 2026-10-31 [claude] [前端] 完成
+月營收上前端（基本面卡片新增「月營收 YoY」長條圖，正紅負綠）；並做**全站手機 RWD** 與**總覽列表重構**：header/兩欄佈局/K線 tooltip 與量軸、長條圖橫滑都修好手機跑版；總覽改分頁（每頁 10 筆）、拿掉「看圖」（點列進詳情）、手機加自選改代號前星星 icon、星星顯示「已加入」實心狀態；自選股移除改紅叉 icon 並點列進詳情；排行榜可開合＋手機移到列表上方。
+
+### 2026-10-31 [claude] [後端] 完成
+rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改為只遍歷有日線的約 50 檔，4.5s→0.1s。
 
 ### 2026-10-31 [claude] [Java後端] 完成
 **啟動 Spring Boot 版後端（新角色 `backend-java/`，對照 Python FastAPI 版）**：Spring Boot 3.4.1 + JDK 21 + Maven Wrapper；三層架構 Entity(`Stock`)/Repository(`StockRepository`)/Controller(`StockController`) 寫出第一支 `GET /api/stocks?q=`。連**同一個 MySQL `stock_db`**（讀 Python 版灌好的資料，不重 seed），跑在 **8081** 埠。實測與 Python 版（8000）回傳**完全相同的 JSON**（含中文搜尋）。環境搭建雷另記於 `CLAUDE_CODE_SETUP_GUIDE.md`。
@@ -79,6 +89,18 @@
 - **原因**：FinMind 全台股基本資料混入「指數」列（`industry=Index`，代碼如 `TradingConsumersGoods` 長 21 字元），超過 `stock_id = String(10)`。**SQLite 不強制 VARCHAR 長度**（超過照存），**MySQL 嚴格檢查**超長就擋 → 這雷只在 MySQL 現形。
 - **解法**：seed 過濾掉 `industry=='Index'` 的指數列（本就非個股、不該進股票搜尋），並加 `len(sid)>10` 長度保險。真實證券代碼最長 6 碼（連債券 ETF `00835B` 都在 `String(10)` 內），故**維持 `String(10)`、不需改 schema**。
 - **同類延伸**：和上一則「SQLite 主鍵不自增」同源，都是「SQLite 寬鬆、MySQL 嚴格」的跨 DB 差異——用嚴格的 MySQL 實測才逼得出來，這正是把 DB 換成 MySQL 的價值。
+
+### 2026-10-31 [claude] [後端] 雷
+**漲跌排行每次都慢 4~5 秒（N+1 查詢）。**
+- **現象**：進出任一股票回到總覽，排行榜都要重算、等 4~5 秒。
+- **原因**：rankings 用 `for s in db.query(Stock).all()`（全台 3088 檔）再逐檔查最近 2 筆日線——這是 N+1；但其實只有約 50 檔有日線，掃其餘 3000+ 檔全是白工。
+- **解法**：先 `db.query(DailyPrice.stock_id).distinct()` 取「有日線」的代號（約 50），只對這些算。實測 **4.5s → 0.1s（快 45 倍）**。
+
+### 2026-10-31 [claude] [前端] 雷
+**console 狂噴 error 以為程式壞了，其實是瀏覽器擴充。**
+- **現象**：DevTools 累積上千 error、感覺「背景一直在跑」。
+- **原因**：訊息是 `extensionAdapter.sendMessageToTab`、`inlineForm...doNotRemove`、`You do not have a background page`——都是瀏覽器**擴充套件**注入頁面報的，與 app 無關。
+- **解法／判斷**：用**無痕視窗**（擴充停用）開 app，console 即乾淨。排錯時先認清 error 來源（我方程式 vs 擴充／第三方），別被誤導。
 
 ---
 
@@ -142,12 +164,31 @@
 - **查表加速**：算 YoY/MoM 要反覆找「去年同月/上個月」，先把全部撈成 `{(年,月):營收}` dict，查詢 O(1)——用空間換時間。
 - **跨年邊界雷**：1 月的「上個月」是**去年 12 月**不是「0 月」；`month==1` 要特判成 `(year-1, 12)`，否則 1 月的 MoM 永遠算錯。除法前也要擋 base 為 0/None（最早幾個月沒有 YoY 屬正常，回 null）。
 
+### 2026-10-22 [claude] [全端] 觀念
+**多分支共用文件的合併衝突，與減少衝突的習慣（協作經驗，面試可聊）。**
+- **現象**：每做一個前端功能、把前後端往上合進 `stock-app/main` 時，`DEV_LOG.md` 幾乎每次都衝突（程式碼反而不衝突）。
+- **原因**：前後端兩條線都在改**同一份 DEV_LOG 的同一區域**（尤其「六、現況」那幾行）。git 合併時「兩邊改同一行」就會衝突；「各自新增不同行」則能自動合。
+- **解法／習慣**（已寫入本檔開頭「減少合併衝突的寫法約定」）：① 只「追加新 `###` 條目」不改別人既有行；② 「六、現況」前後端**分行**各寫各的；③ **降低往上整合的頻率**（功能合回角色主線即可，角色→專案主線只在里程碑做）。
+- **延伸**：這就是真實團隊「為什麼要約定文件/程式的編輯慣例」——降低 merge conflict 是協作效率問題，不只是技術問題。
+
+### 2026-10-31 [claude] [前端] 觀念
+**手機 RWD 與互動細節（做月營收 UI 時順手修全站）。**
+- **寬內容自己捲**：長條圖/表格用 `overflow-x` 在自身容器捲動，`body` 不橫向跑版。
+- **斷點與順序**：兩欄佈局用 Element 斷點 `:xs/:sm/:md`（手機整行堆疊）；堆疊順序可用 flex `order` 調換，不動 DOM（桌面維持原佈局）。
+- **大數字與浮框**：成交量用 formatter 縮成「億/萬」避免被 Y 軸寬度裁切；ECharts tooltip `confine:true` 把浮框限制在容器內不外溢。
+- **`ref<Set>` 要重新賦值**：Vue3 `ref<Set>` 直接 `.add()` 不會觸發畫面更新，要 `new Set(舊).add(x)` 重新賦值（星星「已加入」狀態就是靠這更新）。
+- **N+1 查詢**：後端 rankings 的教訓——「迴圈裡逐筆查 DB」在資料量大時會很慢，先縮小迴圈範圍（只查有資料的）或改一次查詢。
+
 ### 2026-10-31 [claude] [Java後端] 觀念
 **Spring Boot 三層架構，對照 Python FastAPI（學 Java 的切入點）。**
 - **Entity（`@Entity`）≈ SQLAlchemy model**：一個 class 對一張表，欄位用註解映射；`stockId`（Java 駝峰）靠 `spring.jackson.property-naming-strategy=SNAKE_CASE` 輸出成 `stock_id`，和 Python 版 JSON 一致 → **同契約、兩實作**，同一前端通用。
 - **Repository（`extends JpaRepository`）≈ db.query**：只寫 interface、不寫實作，Spring Data **自動生出** findAll/save… 比 SQLAlchemy 還自動；自訂搜尋用 `@Query`（類 SQL 的 JPQL）。
 - **Controller（`@RestController`/`@GetMapping`）≈ FastAPI router**：註解即路由；建構子注入 Repository ≈ FastAPI 的 `Depends`。
 - **核心差異感受**：Java/Spring 大量用**註解驅動**＋**依賴注入**，比 Python 更「約定大於配置」；型別嚴格、要寫 getter。但三層職責和 Python 版一一對應，觀念可直接遷移。
+
+---
+
+## 五、實測結果（證明真的會動）
 
 ### 2026-06-10 22:10 [claude] [後端] 實測
 ```
@@ -199,6 +240,9 @@ seed：台灣50 月營收 50/50 成功，revenues 共 1800 筆（50 檔 × 36 �
 查無資料的 9999 → 正確 404
 ```
 
+### 2026-10-31 [claude] [後端] 實測
+rankings 優化前後（同機連測 3 次）：**4.99s / 4.60s / 4.44s → 0.12s / 0.10s / 0.09s**；回傳內容一致（緯創 +5%…）。
+
 ### 2026-10-31 [claude] [Java後端] 實測
 **Spring Boot 版第一支 API 與 Python 版並排對照（讀同一個 MySQL）：**
 ```
@@ -211,7 +255,7 @@ Python (8000) GET /api/stocks?q=2330 → [{"stock_id":"2330","name":"台積電",
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
-- **後端**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
-- **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖已呈現；**月營收尚未上前端**。
-- **Java 後端（`backend-java/`）**：Spring Boot 3.4.1 骨架 + 第一支 `GET /api/stocks` 已跑通（8081，讀同一 MySQL、JSON 與 Python 版一致）。**下一步：逐支翻譯 prices/valuation/financials/revenue/rankings/watchlist**。
-- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收後端~~（✅ 2026-10-22）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：月營收上前端（前端線）、Spring Boot 逐支翻譯其餘 API**。
+- **後端（Python）**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；rankings 已優化（4.5s→0.1s）；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
+- **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖＋**月營收 YoY 圖**皆已呈現；**全站手機 RWD＋總覽分頁/星星已加入狀態/排行榜開合**均已完成並實測。
+- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1 骨架 + 第一支 `GET /api/stocks` 已跑通（8081，讀同一 MySQL、JSON 與 Python 版一致）。**下一步：逐支翻譯 prices/valuation/financials/revenue/rankings/watchlist**。
+- **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收（後端+前端）~~（✅ 2026-10-22～31）→ ~~手機 RWD＋UX 優化＋rankings 效能~~（✅ 2026-10-31）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：Spring Boot 逐支翻譯其餘 API**。

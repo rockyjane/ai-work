@@ -31,9 +31,15 @@ body { margin: 0; }
   display: flex;
   align-items: center;
   gap: 24px;
+  padding: 0 16px;
   border-bottom: 1px solid #eee;
   background: #fff;
 }
-.brand { font-size: 20px; font-weight: 700; }
+.brand { font-size: 20px; font-weight: 700; white-space: nowrap; }
 .nav { border-bottom: none !important; }
+/* 手機版：縮小標題與間距，避免「台股分析」被擠到換行 */
+@media (max-width: 600px) {
+  .header { gap: 10px; padding: 0 8px; }
+  .brand { font-size: 15px; }
+}
 </style>
