@@ -55,6 +55,9 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 ### 2026-10-31 [claude] [Java後端] 完成
 **啟動 Spring Boot 版後端（新角色 `backend-java/`，對照 Python FastAPI 版）**：Spring Boot 3.4.1 + JDK 21 + Maven Wrapper；三層架構 Entity(`Stock`)/Repository(`StockRepository`)/Controller(`StockController`) 寫出第一支 `GET /api/stocks?q=`。連**同一個 MySQL `stock_db`**（讀 Python 版灌好的資料，不重 seed），跑在 **8081** 埠。實測與 Python 版（8000）回傳**完全相同的 JSON**（含中文搜尋）。環境搭建雷另記於 `CLAUDE_CODE_SETUP_GUIDE.md`。
 
+### 2026-11-04 [claude] [Java後端] 完成
+**Spring Boot 逐支翻譯 批次 A**：`GET /stocks/{id}`（個股資訊）＋ `GET /stocks/{id}/prices`（K線+技術指標）。新增 `price/` 子套件：`DailyPrice` Entity、`DailyPriceRepository`、**`IndicatorService`（Java 手刻 MA/RSI/MACD/KD，對照 Python 的 pandas）**、`PriceController`（組裝成 ECharts 格式、含 limit 裁切）。實測 2330 的 MA/RSI/MACD/KD 末值與 Python 版**數字完全一致**。（進度：Java 3/10 支 API）
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -194,6 +197,13 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 - **面試怎麼講**：「我用兩種後端語言實作同一個系統、共用同一個 MySQL 與同一個前端，證明 API 契約設計良好、前後端解耦」——同時展示 Python 與 Java 兩種技能。
 - **操作細節**（怎麼開/怎麼切）另記於 `CLAUDE_CODE_SETUP_GUIDE.md` §15.6，此處只記設計觀念。
 
+### 2026-11-04 [claude] [Java後端] 觀念
+**Java 手刻技術指標 vs Python pandas 向量化（翻 prices 時的核心對照）。**
+- **pandas 一行 vs Java 迴圈**：Python `close.rolling(5).mean()` 向量化一行算完整條 MA；Java 沒 pandas，要用迴圈逐筆算（MA 用滑動視窗加減、EMA 用遞迴 `alpha*v+ (1-alpha)*prev`）。概念相同、手動展開。
+- **對齊細節才會數字一致**：EMA 的 `alpha=2/(span+1)`、RSI 的 Wilder 平滑 `alpha=1/period`、KD 的 9,3,3、資料不足回 `null`（對應 pandas 的 NaN→None、`min_periods`）——這些細節對齊後，2330 的 MA/RSI/MACD/KD 末值兩版**完全相同**。
+- **金融數字用 `BigDecimal` 不用 `double`**：Entity 的價格欄位用 `BigDecimal`（對應 Numeric），避免浮點誤差；只有進指標計算當下才轉 `double`。
+- **收穫**：親手刻一遍指標，比 call pandas 更懂每個指標的算法；也體會到「向量化語言 vs 命令式語言」處理數據的差異。
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -259,11 +269,20 @@ Python (8000) GET /api/stocks?q=2330 → [{"stock_id":"2330","name":"台積電",
 兩者回傳「完全相同」；中文搜尋「台積」、空搜尋前 50 筆也正常。
 ```
 
+### 2026-11-04 [claude] [Java後端] 實測
+**批次 A（prices + 指標）兩版並排對照 2330（limit=250）：**
+```
+          天數  MA5    MA20   MA60   RSI    MACD   K      D
+Java   : 250  2435.0 2492.0 2421.5 39.48  0.004  14.31  26.19
+Python : 250  2435.0 2492.0 2421.5 39.48  0.004  14.31  26.19   ← 完全相同
+/stocks/2330 個股資訊也一致。
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
 - **後端（Python）**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；rankings 已優化（4.5s→0.1s）；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
 - **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖＋**月營收 YoY 圖**皆已呈現；**全站手機 RWD＋總覽分頁/星星已加入狀態/排行榜開合**均已完成並實測。
-- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1 骨架 + 第一支 `GET /api/stocks` 已跑通（8081，讀同一 MySQL、JSON 與 Python 版一致）。**下一步：逐支翻譯 prices/valuation/financials/revenue/rankings/watchlist**。
+- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1；已翻譯 **3/10 支**——`/stocks`（搜尋）、`/stocks/{id}`（個股）、`/stocks/{id}/prices`（K線+手刻指標，數字對齊 Python）。**下一步：valuation/financials/revenue → rankings → watchlist**。
 - **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收（後端+前端）~~（✅ 2026-10-22～31）→ ~~手機 RWD＋UX 優化＋rankings 效能~~（✅ 2026-10-31）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：Spring Boot 逐支翻譯其餘 API**。
