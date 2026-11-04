@@ -3,10 +3,13 @@ package com.stockapp.backend.stock;
 import java.util.List;
 
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 股票 REST API，對應 Python 版的 routers/stocks.py。
@@ -32,5 +35,12 @@ public class StockController {
     public List<Stock> listStocks(@RequestParam(defaultValue = "") String q) {
         // PageRequest.of(0, 50) = 第 0 頁、每頁 50 筆，等同 Python 的 .limit(50)
         return repo.search(q, PageRequest.of(0, 50));
+    }
+
+    // 對照 Python：@router.get("/stocks/{stock_id}")；查無回 404
+    @GetMapping("/stocks/{stockId}")
+    public Stock getStock(@PathVariable String stockId) {
+        return repo.findById(stockId)   // JpaRepository 內建，等同 db.query(Stock).filter(id==).first()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "找不到這檔股票"));
     }
 }
