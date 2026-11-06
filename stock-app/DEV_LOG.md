@@ -61,6 +61,9 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 ### 2026-11-05 [claude] [Java後端] 完成
 **Spring Boot 逐支翻譯 批次 B**：三個財報 API——`/stocks/{id}/valuation`（PER/PBR/殖利率）、`/stocks/{id}/financials`（EPS）、`/stocks/{id}/revenue`（月營收，含即時 YoY/MoM）。新增 `financial/` 子套件，每個 API 四件組 Entity/Repository/**DTO(record)**/Controller。Revenue 的 YoY/MoM 用 Java `Map` 查表複刻 Python 的 dict（含 1 月上月＝去年 12 月的跨年特判）。實測三 API 與 Python 版**數字完全一致**、404 正確。（進度：Java 6/10 支 API）
 
+### 2026-11-05 [claude] [Java後端] 完成
+**Spring Boot 逐支翻譯 批次 C**：`GET /rankings`（漲跌幅排行）。新增 `ranking/` 子套件（`RankItem` record + `RankingController`）；`DailyPriceRepository` 補 `findDistinctStockIds`（只遍歷有日線的股票，對應 Python 效能優化）與最近 2 筆查詢。算最近兩交易日漲跌幅、排序、分 gainers/losers。實測與 Python 版排行**完全一致**。（進度：Java 7/10 支 API）
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -307,11 +310,18 @@ revenue   (2026/9)    ：營收 5119億 YoY +54.65% MoM -0.57% → Java == Pytho
 9999（查無）→ 兩版皆 404
 ```
 
+### 2026-11-05 [claude] [Java後端] 實測
+**批次 C（rankings?top=3）兩版並排，完全一致：**
+```
+漲：3231 +5.0% / 4938 +2.94% / 6669 +2.12%   → Java == Python
+跌：6505 -8.19% / 0050 -5.87% / 3037 -5.8%    → Java == Python
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
 - **後端（Python）**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；rankings 已優化（4.5s→0.1s）；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
 - **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖＋**月營收 YoY 圖**皆已呈現；**全站手機 RWD＋總覽分頁/星星已加入狀態/排行榜開合**均已完成並實測。
-- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1；已翻譯 **6/10 支**——`/stocks`、`/stocks/{id}`、`/prices`（手刻指標）、`/valuation`、`/financials`、`/revenue`（含 YoY/MoM），數字全對齊 Python。**下一步：rankings → watchlist(GET/POST/DELETE)**。
+- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1；已翻譯 **7/10 支**——搜尋/個股/prices/valuation/financials/revenue/**rankings**，數字全對齊 Python。**下一步：watchlist（GET/POST/DELETE，唯一有寫入）**。
 - **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收（後端+前端）~~（✅ 2026-10-22～31）→ ~~手機 RWD＋UX 優化＋rankings 效能~~（✅ 2026-10-31）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：Spring Boot 逐支翻譯其餘 API**。
