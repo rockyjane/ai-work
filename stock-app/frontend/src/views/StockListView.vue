@@ -36,10 +36,14 @@ async function loadWatched() {
 // 排行榜可開合（初始展開）
 const rankOpen = ref(true)
 
+// 列表篩選：true=只顯示「有行情資料」的股票（約50檔含台積電，點進去就有K線）；
+// false=全部台股（含還沒抓資料的，點進去可即時抓取）。預設只看有資料的。
+const onlyHasData = ref(true)
+
 async function load() {
   loading.value = true
   try {
-    stocks.value = await getStocks(keyword.value)
+    stocks.value = await getStocks(keyword.value, onlyHasData.value)
     currentPage.value = 1          // 每次搜尋回到第一頁
   } finally {
     loading.value = false
@@ -97,6 +101,15 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
               style="max-width: 360px"
             />
             <el-button type="primary" :loading="loading" @click="load">搜尋</el-button>
+          </div>
+          <div class="filter-bar">
+            <el-radio-group v-model="onlyHasData" size="small" @change="load">
+              <el-radio-button :value="true">有資料</el-radio-button>
+              <el-radio-button :value="false">全部台股</el-radio-button>
+            </el-radio-group>
+            <span class="filter-hint">
+              {{ onlyHasData ? '只列有行情的股票（點進去就有 K 線）' : '全部台股；點沒資料的可即時抓取' }}
+            </span>
           </div>
 
           <el-table :data="pagedStocks" v-loading="loading" stripe @row-click="(r:any)=>goDetail(r.stock_id)" class="stock-table" style="cursor: pointer">
@@ -168,7 +181,9 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
 <style scoped>
 .page { max-width: 1200px; margin: 0 auto; }
-.search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+.filter-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.filter-hint { color: #909399; font-size: 12px; }
 .rank-title { font-weight: 700; margin: 6px 0; }
 .rank-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; border-bottom: 1px dashed #f0f0f0; }
 .rank-row:hover { background: #fafafa; }

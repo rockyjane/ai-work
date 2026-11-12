@@ -45,11 +45,15 @@ export interface WatchItem {
   note?: string
 }
 
-export const getStocks = (q = '') =>
-  api.get<Stock[]>('/stocks', { params: { q } }).then((r) => r.data)
+export const getStocks = (q = '', hasData = false) =>
+  api.get<Stock[]>('/stocks', { params: { q, has_data: hasData } }).then((r) => r.data)
 
 export const getStock = (id: string) =>
   api.get<Stock>(`/stocks/${id}`).then((r) => r.data)
+
+// on-demand 即時抓取這檔的資料（POST /stocks/{id}/fetch）
+export const fetchStockData = (id: string) =>
+  api.post(`/stocks/${id}/fetch`).then((r) => r.data)
 
 export const getPrices = (id: string, indicators = 'ma,rsi,macd,kd', limit = 250) =>
   api.get<PriceData>(`/stocks/${id}/prices`, { params: { indicators, limit } }).then((r) => r.data)

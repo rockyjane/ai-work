@@ -3,7 +3,7 @@ import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Minus } from '@element-plus/icons-vue'
-import { getStock, getPrices, getValuation, getFinancials, getRevenue, addWatchlist, type Stock, type PriceData, type Valuation, type Financial, type Revenue } from '../api'
+import { getStock, getPrices, getValuation, getFinancials, getRevenue, addWatchlist, fetchStockData, type Stock, type PriceData, type Valuation, type Financial, type Revenue } from '../api'
 import KLineChart from '../components/KLineChart.vue'
 
 const route = useRoute()
@@ -13,6 +13,8 @@ const stock = ref<Stock | null>(null)
 const data = ref<PriceData | null>(null)
 const valuation = ref<Valuation | null>(null)   // 最新一筆評價指標
 const valOpen = ref(true)                        // 基本面卡片開合（預設展開）
+const noData = ref(false)                        // 這檔沒行情資料（顯示「載入這檔」）
+const fetching = ref(false)                      // on-demand 抓取中
 const financials = ref<Financial[]>([])          // EPS 近幾季（由新到舊）
 const revenues = ref<Revenue[]>([])              // 月營收近幾個月（由新到舊）
 const loading = ref(false)
@@ -59,11 +61,14 @@ const indicatorHint: Record<string, string> = {
 
 async function load(id: string) {
   loading.value = true
+  noData.value = false
   try {
     stock.value = await getStock(id)
     data.value = await getPrices(id)
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || '讀取失敗')
+    // 沒行情資料（404）是正常情況 → 標記 noData，引導即時抓取（不當成錯誤彈窗）
+    data.value = null
+    noData.value = true
   } finally {
     loading.value = false
   }
@@ -85,6 +90,21 @@ async function load(id: string) {
     revenues.value = await getRevenue(id, 12)
   } catch {
     revenues.value = []
+  }
+}
+
+// on-demand：即時抓這檔的資料，抓完重新載入
+async function fetchThis() {
+  const id = route.params.id as string
+  fetching.value = true
+  try {
+    await fetchStockData(id)
+    ElMessage.success('已抓取，載入中…')
+    await load(id)
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '抓取失敗')
+  } finally {
+    fetching.value = false
   }
 }
 
@@ -127,6 +147,15 @@ watch(() => route.params.id, (id) => id && load(id as string))
         </ul>
       </el-collapse-item>
     </el-collapse>
+
+    <el-card class="nodata-card" v-if="noData">
+      <el-empty :image-size="80" description="這檔股票還沒有行情資料">
+        <el-button type="primary" :loading="fetching" @click="fetchThis">
+          {{ fetching ? '抓取中…（約數秒）' : '立即從 FinMind 抓取這檔' }}
+        </el-button>
+        <div class="nodata-hint">會即時抓近 2 年日線＋評價＋財報＋營收存入資料庫，不必跑終端機</div>
+      </el-empty>
+    </el-card>
 
     <el-card class="val-card" v-if="valuation">
       <div class="val-head" @click="valOpen = !valOpen">
@@ -219,6 +248,8 @@ watch(() => route.params.id, (id) => id && load(id as string))
 
 <style scoped>
 .page { max-width: 1200px; margin: 0 auto; }
+.nodata-card { margin-bottom: 12px; }
+.nodata-hint { color: #909399; font-size: 12px; margin-top: 8px; }
 .ph { margin-bottom: 16px; }
 .title { font-size: 18px; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 /* 手機版：縮小標題與基本面數字，避免 header 與卡片過擠 */
