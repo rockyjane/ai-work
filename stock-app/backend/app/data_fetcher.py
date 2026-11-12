@@ -6,6 +6,7 @@ open, max, min, close, spread, Trading_turnover
 （注意：high=max、low=min、volume=Trading_Volume）
 """
 import os
+from datetime import date, timedelta
 import pandas as pd
 from FinMind.data import DataLoader
 from sqlalchemy.orm import Session
@@ -191,3 +192,23 @@ def upsert_stock(db: Session, stock_id: str, name: str, industry: str = "", mark
         s.industry = industry or s.industry
         s.market = market or s.market
     db.commit()
+
+
+def fetch_one_stock(db: Session, stock_id: str) -> dict:
+    """即時抓單一股票的日線＋評價＋財報＋營收並寫入 DB（on-demand）。
+
+    供前端點到「沒資料」的股票時即時補資料，不必跑終端機 seed.py。
+    各段起始日沿用 seed 的設定；回傳各項新增筆數。基本資料(name/產業)
+    已在 stocks 表（seed 灌了全台股），故這裡不再重抓。
+    """
+    today = date.today()
+    return {
+        "prices": upsert_prices(
+            db, stock_id, fetch_daily(stock_id, (today - timedelta(days=365 * 2)).isoformat())),
+        "valuation": upsert_valuation(
+            db, stock_id, fetch_per_pbr(stock_id, (today - timedelta(days=365)).isoformat())),
+        "financials": upsert_financials(
+            db, stock_id, fetch_financials(stock_id, (today - timedelta(days=365 * 3)).isoformat())),
+        "revenue": upsert_revenue(
+            db, stock_id, fetch_revenue(stock_id, (today - timedelta(days=365 * 3)).isoformat())),
+    }
