@@ -25,7 +25,8 @@ def list_stocks(q: str = "", has_data: bool = False, db: Session = Depends(get_d
         query = query.filter(Stock.stock_id.in_(seeded))
     if q:
         query = query.filter(or_(Stock.stock_id.contains(q), Stock.name.contains(q)))
-    rows = query.limit(50).all()
+    # 「全部台股」（無搜尋、無 has_data）回全部供前端分頁瀏覽；其餘情況限 50 筆即可
+    rows = query.all() if (not q and not has_data) else query.limit(50).all()
     return [
         {"stock_id": s.stock_id, "name": s.name, "industry": s.industry, "market": s.market}
         for s in rows
@@ -48,6 +49,23 @@ def fetch_stock_data(stock_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"抓取失敗（可能被 FinMind 限流）：{e}")
     return {"stock_id": stock_id, "added": added}
+
+
+@router.delete("/stocks/{stock_id}/data")
+def clear_stock_data(stock_id: str, db: Session = Depends(get_db)):
+    """清除某檔的所有行情/財報資料（日線/評價/EPS/營收），還原成「沒資料」狀態。
+
+    供展示用：抓取玩過後清掉，就能重新展示 on-demand 抓取。
+    stocks 表的基本資料保留（仍可搜尋）。⚠️ 若清掉 TW50 預設檔，需重跑 seed 才能復原。
+    """
+    deleted = {
+        "prices": db.query(DailyPrice).filter(DailyPrice.stock_id == stock_id).delete(),
+        "valuation": db.query(Valuation).filter(Valuation.stock_id == stock_id).delete(),
+        "financials": db.query(Financial).filter(Financial.stock_id == stock_id).delete(),
+        "revenue": db.query(Revenue).filter(Revenue.stock_id == stock_id).delete(),
+    }
+    db.commit()
+    return {"stock_id": stock_id, "deleted": deleted}
 
 
 @router.get("/stocks/{stock_id}")
