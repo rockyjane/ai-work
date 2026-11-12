@@ -2,6 +2,7 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Plus, Minus } from '@element-plus/icons-vue'
 import { getStock, getPrices, getValuation, getFinancials, getRevenue, addWatchlist, type Stock, type PriceData, type Valuation, type Financial, type Revenue } from '../api'
 import KLineChart from '../components/KLineChart.vue'
 
@@ -11,6 +12,7 @@ const router = useRouter()
 const stock = ref<Stock | null>(null)
 const data = ref<PriceData | null>(null)
 const valuation = ref<Valuation | null>(null)   // 最新一筆評價指標
+const valOpen = ref(true)                        // 基本面卡片開合（預設展開）
 const financials = ref<Financial[]>([])          // EPS 近幾季（由新到舊）
 const revenues = ref<Revenue[]>([])              // 月營收近幾個月（由新到舊）
 const loading = ref(false)
@@ -127,10 +129,14 @@ watch(() => route.params.id, (id) => id && load(id as string))
     </el-collapse>
 
     <el-card class="val-card" v-if="valuation">
-      <div class="val-head">
+      <div class="val-head" @click="valOpen = !valOpen">
         <span class="val-title">基本面（{{ valuation.date }}）</span>
         <span class="val-sub">看「體質／貴不貴」，和左邊 K 線的「行情」互補</span>
+        <el-icon class="val-toggle" :title="valOpen ? '收合' : '展開'">
+          <Minus v-if="valOpen" /><Plus v-else />
+        </el-icon>
       </div>
+      <div v-show="valOpen">
       <div class="val-grid">
         <el-tooltip :content="valuationHint.per" placement="bottom">
           <div class="val-item">
@@ -193,6 +199,7 @@ watch(() => route.params.id, (id) => id && load(id as string))
           </el-tooltip>
         </div>
       </div>
+      </div>
     </el-card>
 
     <el-card class="chart-card" v-if="data">
@@ -226,8 +233,9 @@ watch(() => route.params.id, (id) => id && load(id as string))
 .label { font-weight: 600; }
 .hint { color: #909399; font-size: 13px; }
 .val-card { margin-bottom: 12px; }
-.val-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.val-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; cursor: pointer; user-select: none; }
 .val-title { font-weight: 700; font-size: 15px; }
+.val-toggle { margin-left: auto; font-size: 16px; color: #909399; }
 .val-sub { color: #909399; font-size: 12px; }
 .val-grid { display: flex; gap: 12px; flex-wrap: wrap; }
 .val-item { flex: 1; min-width: 120px; background: #f7f8fa; border-radius: 8px; padding: 12px 14px; cursor: help; }
