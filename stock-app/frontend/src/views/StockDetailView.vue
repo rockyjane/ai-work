@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Minus } from '@element-plus/icons-vue'
-import { getStock, getPrices, getValuation, getFinancials, getRevenue, addWatchlist, fetchStockData, type Stock, type PriceData, type Valuation, type Financial, type Revenue } from '../api'
+import { getStock, getPrices, getValuation, getFinancials, getRevenue, addWatchlist, fetchStockData, clearStockData, type Stock, type PriceData, type Valuation, type Financial, type Revenue } from '../api'
 import KLineChart from '../components/KLineChart.vue'
 
 const route = useRoute()
@@ -108,6 +108,21 @@ async function fetchThis() {
   }
 }
 
+// 清除這檔資料（展示用：清掉後回到「沒資料」，可重新展示抓取）
+async function clearThis() {
+  const id = route.params.id as string
+  await ElMessageBox.confirm(
+    `清除 ${id} ${stock.value?.name || ''} 的所有行情/財報資料？清除後可重新展示「即時抓取」。`,
+    '清除資料（展示用）', { type: 'warning' })
+  try {
+    await clearStockData(id)
+    ElMessage.success('已清除，回到未抓取狀態')
+    await load(id)   // 重新載入 → 變回「沒資料、顯示抓取按鈕」
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '清除失敗')
+  }
+}
+
 async function addToWatch() {
   if (!stock.value) return
   try {
@@ -134,6 +149,7 @@ watch(() => route.params.id, (id) => id && load(id as string))
       </template>
       <template #extra>
         <el-button type="warning" plain @click="addToWatch">加入自選股</el-button>
+        <el-button v-if="data" type="info" plain size="small" @click="clearThis" title="清除此檔資料，供重新展示抓取">清除資料</el-button>
       </template>
     </el-page-header>
 

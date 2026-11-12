@@ -55,6 +55,10 @@ export const getStock = (id: string) =>
 export const fetchStockData = (id: string) =>
   api.post(`/stocks/${id}/fetch`).then((r) => r.data)
 
+// 清除這檔資料（DELETE），還原成「沒資料」供重新展示抓取
+export const clearStockData = (id: string) =>
+  api.delete(`/stocks/${id}/data`).then((r) => r.data)
+
 export const getPrices = (id: string, indicators = 'ma,rsi,macd,kd', limit = 250) =>
   api.get<PriceData>(`/stocks/${id}/prices`, { params: { indicators, limit } }).then((r) => r.data)
 
