@@ -58,6 +58,15 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 ### 2026-11-04 [claude] [Java後端] 完成
 **Spring Boot 逐支翻譯 批次 A**：`GET /stocks/{id}`（個股資訊）＋ `GET /stocks/{id}/prices`（K線+技術指標）。新增 `price/` 子套件：`DailyPrice` Entity、`DailyPriceRepository`、**`IndicatorService`（Java 手刻 MA/RSI/MACD/KD，對照 Python 的 pandas）**、`PriceController`（組裝成 ECharts 格式、含 limit 裁切）。實測 2330 的 MA/RSI/MACD/KD 末值與 Python 版**數字完全一致**。（進度：Java 3/10 支 API）
 
+### 2026-11-05 [claude] [Java後端] 完成
+**Spring Boot 逐支翻譯 批次 B**：三個財報 API——`/stocks/{id}/valuation`（PER/PBR/殖利率）、`/stocks/{id}/financials`（EPS）、`/stocks/{id}/revenue`（月營收，含即時 YoY/MoM）。新增 `financial/` 子套件，每個 API 四件組 Entity/Repository/**DTO(record)**/Controller。Revenue 的 YoY/MoM 用 Java `Map` 查表複刻 Python 的 dict（含 1 月上月＝去年 12 月的跨年特判）。實測三 API 與 Python 版**數字完全一致**、404 正確。（進度：Java 6/10 支 API）
+
+### 2026-11-05 [claude] [Java後端] 完成
+**Spring Boot 逐支翻譯 批次 C**：`GET /rankings`（漲跌幅排行）。新增 `ranking/` 子套件（`RankItem` record + `RankingController`）；`DailyPriceRepository` 補 `findDistinctStockIds`（只遍歷有日線的股票，對應 Python 效能優化）與最近 2 筆查詢。算最近兩交易日漲跌幅、排序、分 gainers/losers。實測與 Python 版排行**完全一致**。（進度：Java 7/10 支 API）
+
+### 2026-11-06 [claude] [Java後端] 完成
+**Spring Boot 逐支翻譯 批次 D（最後一批）**：`/watchlist` GET/POST/DELETE（自選股增刪查，唯一「有寫入」的 API）。新增 `watchlist/` 子套件：`Watchlist` Entity（`@GeneratedValue(IDENTITY)` 自增主鍵、`created_at` 交給 DB）、Repository、DTO、Controller（`@RequestBody` 接 POST、save/deleteById、已存在回 400、找不到回 404）。實測完整 CRUD 一輪皆正確（測試資料用畢即刪、不污染真實自選股）。**🏆 Java 10/10 全部翻譯完成**，與 Python 版達成完整對照。
+
 ---
 
 ## 二、踩到的坑 & 解法（重點）
@@ -204,6 +213,31 @@ rankings 效能優化：原本遍歷全台 3088 檔逐檔查 DB（N+1），改�
 - **金融數字用 `BigDecimal` 不用 `double`**：Entity 的價格欄位用 `BigDecimal`（對應 Numeric），避免浮點誤差；只有進指標計算當下才轉 `double`。
 - **收穫**：親手刻一遍指標，比 call pandas 更懂每個指標的算法；也體會到「向量化語言 vs 命令式語言」處理數據的差異。
 
+### 2026-11-05 [claude] [Java後端] 觀念
+**Spring Boot 常用「註解（annotation）」速查（後端小白小抄）。** 註解＝`@開頭`的標記，貼在 class/方法/欄位上，Spring 啟動時掃到就自動幫你接線（像貼便利貼告訴框架「這是什麼、要怎麼處理」）：
+- `@Entity` `@Table(name="...")`：這個 class 對應一張資料表。≈ SQLAlchemy 的 `class X(Base)` + `__tablename__`。
+- `@Id`：標記主鍵欄位。`@Column(name="stock_id")`：欄位對應的 DB 欄名（名稱不同時才要寫）。
+- `@RestController`：這個 class 是 REST API 控制器（方法回傳值自動轉 JSON）。≈ FastAPI 的 router 檔。
+- `@RequestMapping("/api")`：這個 controller 底下所有路由的共同前綴。
+- `@GetMapping("/stocks/{id}")`：一支 GET API。≈ `@router.get(...)`。（還有 `@PostMapping`/`@DeleteMapping`）
+- `@PathVariable`：接網址路徑裡的參數（`{id}`）。≈ FastAPI 路徑參數。
+- `@RequestParam`：接網址 `?q=...&limit=...` 的查詢參數。≈ FastAPI 的 `q: str = ""`。
+- `@Service`：標記「商業邏輯元件」（如 `IndicatorService`），Spring 會自動建好一份供注入。
+
+### 2026-11-05 [claude] [Java後端] 觀念
+**Java 資料類設計：record vs class、三層分工、主鍵為何不用 UUID。**
+- **DTO 用 `record`、Entity 用 `class`**：`record FinancialDto(String date, Double eps){}` 一行就自動生出建構子/getter/equals（`{}` 空的＝沒額外自訂方法）；省掉手寫一堆 getter。DTO 是「回傳用、不可變的資料盒子」最適合 record；Entity 要給 JPA 操作、欄位會變動，用傳統 class。
+- **Repository 撈、Controller 組裝（職責分離）**：`Repository.findBy...` 只負責從 DB 撈出 `List<Entity>`（原始全欄位）；`Controller` 再把它轉成 `List<DTO>`（挑欄位、型別轉換、必要時加工）。≈ Python 的 `db.query(...).all()`（撈）＋ `[XxxOut(...) for r in rows]`（組裝）。有計算的（如 Revenue 的 YoY/MoM）就在 Controller 這層做。
+- **主鍵為何用自增整數、不用 UUID**：① 我們**沿用 Python 建好的表**（主鍵已是自增整數），Java 連同一個 MySQL 必須一致；② UUID 是為**分散式/多來源**設計，我們單機學習專案用不到；③ 隨機 UUID 當主鍵佔空間大、會讓索引碎片化、插入變慢。**面試點**：懂「何時該用 UUID、何時自增就好」比無腦都用 UUID 更專業。
+
+### 2026-11-06 [claude] [Java後端] 觀念
+**「寫入」API 與只讀的差異（翻 watchlist 時學到）。**
+- **只讀表 vs 寫入表的主鍵**：前面 7 支都只讀，Entity 的 `@Id` 不必自己產值（讀既有資料）；watchlist 要**新增**，id 要 `@GeneratedValue(strategy=IDENTITY)` 讓 MySQL 自增產生。
+- **DB 預設值欄位標 `insertable=false`**：`created_at` 由 DB 的 `now()` 自動填，Java 端標 `insertable=false, updatable=false`，交給 DB、程式不碰。
+- **JPA 的寫入很省事**：`repo.save(entity)` 新增、`repo.deleteById(id)` 刪除、`existsByStockId(...)` 檢查——都是 JpaRepository 內建或方法名派生，不用寫 SQL。≈ Python 的 `db.add()`+`db.commit()`、`db.delete()`。
+- **`@RequestBody`**：接 POST 進來的 JSON body，自動反序列化成 `CreateReq` record。≈ FastAPI 的 `body: WatchlistCreate`。
+- **HTTP 狀態碼語意**：新增重複回 **400**（Bad Request）、刪除找不到回 **404**（Not Found）——RESTful 的錯誤語意，兩版一致。
+
 ---
 
 ## 五、實測結果（證明真的會動）
@@ -278,11 +312,38 @@ Python : 250  2435.0 2492.0 2421.5 39.48  0.004  14.31  26.19   ← 完全相同
 /stocks/2330 個股資訊也一致。
 ```
 
+### 2026-11-05 [claude] [Java後端] 實測
+**批次 B（三財報）兩版並排對照 2330，完全一致：**
+```
+valuation (2026-10-20)：PER 27.88  PBR 9.7   殖利率 0.91   → Java == Python
+financials(2026-06-30)：EPS 27.25                          → Java == Python
+revenue   (2026/9)    ：營收 5119億 YoY +54.65% MoM -0.57% → Java == Python（含跨年計算）
+9999（查無）→ 兩版皆 404
+```
+
+### 2026-11-05 [claude] [Java後端] 實測
+**批次 C（rankings?top=3）兩版並排，完全一致：**
+```
+漲：3231 +5.0% / 4938 +2.94% / 6669 +2.12%   → Java == Python
+跌：6505 -8.19% / 0050 -5.87% / 3037 -5.8%    → Java == Python
+```
+
+### 2026-11-06 [claude] [Java後端] 實測
+**批次 D（watchlist CRUD）完整一輪皆正確（測試資料用畢即刪）：**
+```
+① POST 2317 → id=9 新增成功
+② POST 2317（重複）→ 400
+③ GET → 列出含股票名稱「鴻海」
+④ DELETE id=9 → {ok:true}
+⑤ DELETE 999999（不存在）→ 404
+⑥ GET → 2317 已移除（未污染原自選股）
+```
+
 ---
 
 ## 六、現況與下一步（隨進度更新，配合 README.md）
 
 - **後端（Python）**：完成且已驗證；**搜尋涵蓋全台股、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；rankings 已優化（4.5s→0.1s）；**已可切換並實跑於 Docker MySQL 8.4**（SQLite/MySQL 皆通）。照 `README.md` 即可啟動。
 - **前端**：K 線/搜尋/自選股已點測正常；基本面卡片（PER/PBR/殖利率）＋ EPS 趨勢圖＋**月營收 YoY 圖**皆已呈現；**全站手機 RWD＋總覽分頁/星星已加入狀態/排行榜開合**均已完成並實測。
-- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1；已翻譯 **3/10 支**——`/stocks`（搜尋）、`/stocks/{id}`（個股）、`/stocks/{id}/prices`（K線+手刻指標，數字對齊 Python）。**下一步：valuation/financials/revenue → rankings → watchlist**。
+- **後端（Java，`backend-java/`）**：Spring Boot 3.4.1；**🏆 10/10 支 API 全翻譯完成**（搜尋/個股/prices手刻指標/valuation/financials/revenue含YoY-MoM/rankings/watchlist CRUD），數字與行為全對齊 Python。**下一步：把前端 Vite proxy 切到 8081 做完整對照、或補 README 說明兩後端**。
 - **待辦**：~~擴充更多股票~~（✅ 2026-07-04）→ ~~串接 Docker MySQL~~（✅ 2026-07-19）→ ~~評價指標 PER/PBR/殖利率（後端+前端）~~（✅ 2026-10-17～19）→ ~~EPS（後端+前端）~~（✅ 2026-10-20～21）→ ~~月營收（後端+前端）~~（✅ 2026-10-22～31）→ ~~手機 RWD＋UX 優化＋rankings 效能~~（✅ 2026-10-31）→ ~~Spring Boot 骨架+第一支 API~~（✅ 2026-10-31）→ **下一步：Spring Boot 逐支翻譯其餘 API**。

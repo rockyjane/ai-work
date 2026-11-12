@@ -12,8 +12,9 @@
 ## stock-app — 台股分析網站（重返金融業面試 DEMO + 學後端）
 
 - **狀態**：後端 MVP 完成並驗證；**搜尋涵蓋全台股（3088 檔）、台灣50 有 K 線＋評價指標（PER/PBR/殖利率）＋季度財報（EPS）＋每月營收（含 YoY/MoM）**；**已實跑於 Docker MySQL 8.4（`.env` 一行切換 SQLite⇄MySQL）**；前端 K 線/搜尋/自選股＋基本面卡片＋EPS 趨勢圖＋月營收 YoY 圖皆已呈現，並完成全站手機 RWD、總覽分頁/星星已加入狀態/排行榜開合等 UX 優化，rankings 效能優化（4.5s→0.1s）。
-- **技術**：FastAPI + SQLAlchemy + 純 pandas 手算指標 + FinMind｜Vue 3 + Vite + ECharts｜DB SQLite⇄MySQL 可切。
-- **關鍵決策**：技術指標純 pandas 手算（避開 FinMind 相依衝突）、資料層抽象（一份 ORM 兩種 DB）、行情先進 DB 再供前端。
+- **Java 後端對照**：另有 Spring Boot 版後端（`backend-java/`，連同一個 MySQL）**10/10 支 API 全翻譯完成**，與 Python 版輸出完全一致——「同契約、兩實作」，前端改一行 proxy 即可切換。
+- **技術**：FastAPI + SQLAlchemy + 純 pandas 手算指標 + FinMind｜**Spring Boot 3.4 + JPA（Java 手刻指標）**｜Vue 3 + Vite + ECharts｜DB SQLite⇄MySQL 可切。
+- **關鍵決策**：技術指標純 pandas 手算（避開 FinMind 相依衝突）、資料層抽象（一份 ORM 兩種 DB）、行情先進 DB 再供前端、**同一前端對接 Python/Java 兩後端做語言對照**。
 - **詳細紀錄** → [`stock-app/DEV_LOG.md`](stock-app/DEV_LOG.md)
 
 ---
