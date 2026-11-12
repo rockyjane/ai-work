@@ -13,9 +13,16 @@ router = APIRouter(tags=["stocks"])
 
 
 @router.get("/stocks")
-def list_stocks(q: str = "", db: Session = Depends(get_db)):
-    """搜尋股票（依代號或名稱）。q 留空回傳前 50 檔。"""
+def list_stocks(q: str = "", has_data: bool = False, db: Session = Depends(get_db)):
+    """搜尋股票（依代號或名稱）。q 留空回傳前 50 檔。
+
+    has_data=True 時只回「有日線資料」的股票（約 50 檔，含台積電等主流股）——
+    供前端「有資料／全部」切換用：有資料＝點進去就看得到 K 線/基本面。
+    """
     query = db.query(Stock)
+    if has_data:
+        seeded = [r[0] for r in db.query(DailyPrice.stock_id).distinct().all()]
+        query = query.filter(Stock.stock_id.in_(seeded))
     if q:
         query = query.filter(or_(Stock.stock_id.contains(q), Stock.name.contains(q)))
     rows = query.limit(50).all()
@@ -23,6 +30,24 @@ def list_stocks(q: str = "", db: Session = Depends(get_db)):
         {"stock_id": s.stock_id, "name": s.name, "industry": s.industry, "market": s.market}
         for s in rows
     ]
+
+
+@router.post("/stocks/{stock_id}/fetch")
+def fetch_stock_data(stock_id: str, db: Session = Depends(get_db)):
+    """即時從 FinMind 抓這檔的行情+財報存 DB（on-demand）。
+
+    供前端點到「沒資料」的股票時即時補，不必跑終端機 seed.py。
+    回傳各項新增筆數。抓取需連網、約數秒。
+    """
+    from ..data_fetcher import fetch_one_stock
+    s = db.query(Stock).filter(Stock.stock_id == stock_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="找不到這檔股票")
+    try:
+        added = fetch_one_stock(db, stock_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"抓取失敗（可能被 FinMind 限流）：{e}")
+    return {"stock_id": stock_id, "added": added}
 
 
 @router.get("/stocks/{stock_id}")
